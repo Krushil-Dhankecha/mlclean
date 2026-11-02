@@ -4,6 +4,7 @@ from mlclean.audit import audit
 from mlclean.cleaning import CleaningPipeline, CleaningStep
 from mlclean.issues import DataIssue
 from mlclean.report import AuditReport
+from mlclean.transformer import MLCleaner
 
 __version__ = "0.1.0"
 
@@ -12,6 +13,7 @@ __all__ = [
     "CleaningPipeline",
     "CleaningStep",
     "DataIssue",
+    "MLCleaner",
     "__version__",
     "audit",
 ]
