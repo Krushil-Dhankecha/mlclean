@@ -70,6 +70,25 @@ pipeline = CleaningPipeline.from_json("cleaning_steps.json")
 new_clean = pipeline.apply(new_df)
 ```
 
+## In a scikit-learn workflow
+
+Cleaning decisions must be learned on the training split only — recomputing
+medians on the test set is quiet leakage. `MLCleaner` freezes everything at
+fit time: which columns get dropped and the exact fill values.
+
+```python
+from mlclean import MLCleaner
+
+cleaner = MLCleaner(strategy="balanced")
+X_train_clean = cleaner.fit_transform(X_train, y_train)
+X_test_clean = cleaner.transform(X_test)   # same drops, train's medians
+```
+
+`transform` never changes the number of rows, so X stays aligned with y
+inside pipelines and cross-validation. Deduplicate before splitting, with
+`audit(df).clean()`. No scikit-learn dependency — the transformer follows the
+convention, it doesn't import the library.
+
 ## Checks (v0.1)
 
 | Check | What it catches |
@@ -103,8 +122,8 @@ mlclean audit data.csv --target churn --json report.json --fail-on high   # CI g
 
 ## Roadmap
 
+- [x] scikit-learn-style `MLCleaner` transformer (fit on train, transform test)
 - [ ] `compare_train_test(X_train, X_test, ...)` — split consistency audit
-- [ ] scikit-learn `MLCleaner` transformer (fit on train, transform test)
 - [ ] HTML report
 - [ ] Correlation / multicollinearity warnings
 - [ ] Polars support

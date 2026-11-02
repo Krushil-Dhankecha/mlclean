@@ -15,6 +15,10 @@ import pandas as pd
 
 STRATEGIES = ("audit_only", "safe", "balanced", "aggressive")
 
+# steps that change the number of rows; skipped when a pipeline is replayed
+# as a transformer, where X must stay aligned with y
+ROW_STEPS = {"remove_duplicates", "drop_unlabeled_rows"}
+
 
 @dataclass
 class CleaningStep:
@@ -64,10 +68,18 @@ class CleaningPipeline:
         ]
         return cls(steps=steps, version=data.get("version", "0.1.0"))
 
-    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Replay every step on a (copy of a) DataFrame."""
+    def apply(
+        self, df: pd.DataFrame, *, include_row_steps: bool = True
+    ) -> pd.DataFrame:
+        """Replay every step on a (copy of a) DataFrame.
+
+        With ``include_row_steps=False``, steps that drop rows are skipped so
+        the result keeps one output row per input row.
+        """
         out = df.copy()
         for step in self.steps:
+            if not include_row_steps and step.step in ROW_STEPS:
+                continue
             out = _APPLIERS[step.step](out, step)
         return out
 
@@ -93,10 +105,15 @@ def _apply_strip_whitespace(df: pd.DataFrame, step: CleaningStep) -> pd.DataFram
 def _apply_impute(df: pd.DataFrame, step: CleaningStep) -> pd.DataFrame:
     out = df.copy()
     method = step.params.get("method", "median")
+    # fill values learned when the pipeline was built; falling back to
+    # computing them here keeps pipelines serialized before 0.2 replayable
+    learned = step.params.get("values", {})
     for column in step.columns:
         if column not in out.columns:
             continue
-        if method == "median":
+        if column in learned:
+            fill = learned[column]
+        elif method == "median":
             fill = out[column].median()
         elif method == "mode":
             modes = out[column].mode(dropna=True)
@@ -105,7 +122,7 @@ def _apply_impute(df: pd.DataFrame, step: CleaningStep) -> pd.DataFrame:
             fill = step.params.get("value")
         if step.params.get("indicator"):
             out[f"{column}_missing"] = out[column].isna().astype("int8")
-        if fill is not None:
+        if fill is not None and not pd.isna(fill):
             out[column] = out[column].fillna(fill)
     return out
 
@@ -124,6 +141,16 @@ _APPLIERS = {
     "impute": _apply_impute,
     "drop_unlabeled_rows": _apply_drop_unlabeled_rows,
 }
+
+
+def _mode(series: pd.Series):
+    modes = series.mode(dropna=True)
+    return modes.iloc[0] if not modes.empty else None
+
+
+def _json_scalar(value):
+    """numpy scalars don't survive json.dumps; plain Python ones do."""
+    return value.item() if hasattr(value, "item") else value
 
 
 def build_pipeline(report, strategy: str) -> CleaningPipeline:
@@ -196,7 +223,13 @@ def build_pipeline(report, strategy: str) -> CleaningPipeline:
                 "impute",
                 "missing_values",
                 columns=numeric_gaps,
-                params={"method": "median", "indicator": True},
+                params={
+                    "method": "median",
+                    "indicator": True,
+                    "values": {
+                        c: _json_scalar(report.df[c].median()) for c in numeric_gaps
+                    },
+                },
             )
         )
     if categorical_gaps:
@@ -205,7 +238,13 @@ def build_pipeline(report, strategy: str) -> CleaningPipeline:
                 "impute",
                 "missing_values",
                 columns=categorical_gaps,
-                params={"method": "mode", "indicator": True},
+                params={
+                    "method": "mode",
+                    "indicator": True,
+                    "values": {
+                        c: _json_scalar(_mode(report.df[c])) for c in categorical_gaps
+                    },
+                },
             )
         )
 
