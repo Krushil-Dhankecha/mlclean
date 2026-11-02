@@ -16,19 +16,28 @@ dependencies = [
 ]
 keywords = ["machine-learning", "data-quality", "data-cleaning", "pandas", "leakage"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
+    "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
 ]
 
 [project.urls]
 Homepage = "https://github.com/Krushil-Dhankecha/mlclean"
 Issues = "https://github.com/Krushil-Dhankecha/mlclean/issues"
+Changelog = "https://github.com/Krushil-Dhankecha/mlclean/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
-dev = ["pytest", "ruff"]
+dev = ["pytest", "pytest-cov", "ruff"]
 parquet = ["pyarrow"]
 
 [project.scripts]
@@ -36,6 +45,9 @@ mlclean = "mlclean.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["mlclean*"]
+
+[tool.setuptools.package-data]
+mlclean = ["py.typed"]
 
 [tool.ruff]
 line-length = 88

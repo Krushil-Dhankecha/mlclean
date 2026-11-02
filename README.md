@@ -1,5 +1,9 @@
 # mlclean
 
+[![ci](https://github.com/Krushil-Dhankecha/mlclean/actions/workflows/ci.yml/badge.svg)](https://github.com/Krushil-Dhankecha/mlclean/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/mlclean)](https://pypi.org/project/mlclean/)
+[![Python](https://img.shields.io/pypi/pyversions/mlclean)](https://pypi.org/project/mlclean/)
+
 **ML-aware data quality auditing and cleaning for pandas DataFrames.**
 
 Before you train, `mlclean` answers one question: *what is wrong with this
