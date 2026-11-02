@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 — 2026-11-02
 
 - New check `disguised_missing`: sentinel values standing in for nulls —
   numeric codes like -999 sitting detached from the distribution, and
