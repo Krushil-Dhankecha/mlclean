@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mlclean"
+version = "0.1.0"
+description = "ML-aware data quality auditing and cleaning for pandas DataFrames"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Krushil Dhankecha", email = "dhankechakrushil@gmail.com" }]
+requires-python = ">=3.9"
+dependencies = [
+    "pandas>=1.5",
+    "numpy>=1.23",
+]
+keywords = ["machine-learning", "data-quality", "data-cleaning", "pandas", "leakage"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+[project.urls]
+Homepage = "https://github.com/Krushil-Dhankecha/mlclean"
+Issues = "https://github.com/Krushil-Dhankecha/mlclean/issues"
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff"]
+parquet = ["pyarrow"]
+
+[project.scripts]
+mlclean = "mlclean.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["mlclean*"]
+
+[tool.ruff]
+line-length = 88
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
