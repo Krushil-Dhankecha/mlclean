@@ -96,6 +96,8 @@ convention, it doesn't import the library.
 | `target_leakage` | features with near-perfect association to the target |
 | `id_column` | identifiers accidentally left in the features |
 | `missing_values` / `missing_target` | gaps by column, unlabeled rows |
+| `informative_missingness` | gaps whose pattern predicts the target |
+| `disguised_missing` | sentinels like `-999` or `'unknown'` standing in for NaN |
 | `duplicate_rows` | exact duplicates (and duplicates hiding behind ids) |
 | `constant_column` / `quasi_constant_column` | zero-signal columns |
 | `class_imbalance` / `rare_classes` | skewed and under-represented labels |
@@ -103,6 +105,10 @@ convention, it doesn't import the library.
 | `high_cardinality` | categorical columns one-hot would explode on |
 | `mixed_types` / `numeric_stored_as_text` | dtype traps |
 | `whitespace_padding` / `case_inconsistency` | `' yes'` vs `'yes'` categories |
+
+Run a subset with `audit(df, checks=["leakage", "duplicates"])` or drop noisy
+ones with `skip=["outliers"]`. A check that fails on strange data never aborts
+the audit — it comes back as a `check_error` finding and the rest still run.
 
 ## Cleaning strategies
 
