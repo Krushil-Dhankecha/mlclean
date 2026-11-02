@@ -6,8 +6,8 @@ from dataclasses import dataclass, field
 
 import pandas as pd
 
-from mlclean.checks import ALL_CHECKS
-from mlclean.issues import DataIssue, sort_issues
+from mlclean.checks import CHECKS
+from mlclean.issues import INFO, DataIssue, sort_issues
 from mlclean.report import AuditReport
 
 
@@ -44,6 +44,23 @@ def _infer_task(df: pd.DataFrame, target: str | None) -> str | None:
     return "classification"
 
 
+def _select_checks(
+    checks: list[str] | None, skip: list[str] | None
+) -> dict[str, object]:
+    for given in (checks, skip):
+        if given:
+            unknown = sorted(set(given) - CHECKS.keys())
+            if unknown:
+                raise ValueError(
+                    f"unknown check name(s) {', '.join(unknown)}; "
+                    f"valid names: {', '.join(CHECKS)}"
+                )
+    selected = {name: CHECKS[name] for name in checks} if checks else dict(CHECKS)
+    for name in skip or []:
+        selected.pop(name, None)
+    return selected
+
+
 def audit(
     df: pd.DataFrame,
     target: str | None = None,
@@ -51,6 +68,8 @@ def audit(
     id_columns: list[str] | None = None,
     ignore_columns: list[str] | None = None,
     missing_threshold: float = 0.5,
+    checks: list[str] | None = None,
+    skip: list[str] | None = None,
 ) -> AuditReport:
     """Audit a DataFrame for problems that hurt ML training and evaluation.
 
@@ -64,10 +83,15 @@ def audit(
         ignore_columns: Columns the checks should skip entirely.
         missing_threshold: Missing-rate at which a column is flagged
             high-severity (default 0.5).
+        checks: Run only these checks (names from mlclean.checks.CHECKS).
+        skip: Run everything except these checks.
 
     Returns:
         An AuditReport holding every detected issue, ready to show,
         export, or clean from.
+
+    A failing check never aborts the audit: it is reported as a
+    ``check_error`` finding and the remaining checks still run.
     """
     if target is not None and target not in df.columns:
         raise ValueError(f"target column '{target}' is not in the DataFrame")
@@ -81,7 +105,25 @@ def audit(
     )
 
     issues: list[DataIssue] = []
-    for check in ALL_CHECKS:
-        issues.extend(check(df, ctx))
+    for name, check in _select_checks(checks, skip).items():
+        try:
+            issues.extend(check(df, ctx))
+        except Exception as err:  # noqa: BLE001 — one bad column must not kill the audit
+            issues.append(
+                DataIssue(
+                    check="check_error",
+                    severity=INFO,
+                    message=(
+                        f"The '{name}' check failed on this data and was "
+                        f"skipped ({type(err).__name__}: {err})."
+                    ),
+                    recommendation=(
+                        "The rest of the audit is unaffected. If the data "
+                        "looks ordinary, please report this at "
+                        "github.com/Krushil-Dhankecha/mlclean/issues."
+                    ),
+                    details={"check": name, "error": str(err)},
+                )
+            )
 
     return AuditReport(df=df, context=ctx, issues=sort_issues(issues))

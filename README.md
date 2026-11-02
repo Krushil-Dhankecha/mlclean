@@ -70,6 +70,25 @@ pipeline = CleaningPipeline.from_json("cleaning_steps.json")
 new_clean = pipeline.apply(new_df)
 ```
 
+## In a scikit-learn workflow
+
+Cleaning decisions must be learned on the training split only — recomputing
+medians on the test set is quiet leakage. `MLCleaner` freezes everything at
+fit time: which columns get dropped and the exact fill values.
+
+```python
+from mlclean import MLCleaner
+
+cleaner = MLCleaner(strategy="balanced")
+X_train_clean = cleaner.fit_transform(X_train, y_train)
+X_test_clean = cleaner.transform(X_test)   # same drops, train's medians
+```
+
+`transform` never changes the number of rows, so X stays aligned with y
+inside pipelines and cross-validation. Deduplicate before splitting, with
+`audit(df).clean()`. No scikit-learn dependency — the transformer follows the
+convention, it doesn't import the library.
+
 ## Checks (v0.1)
 
 | Check | What it catches |
@@ -77,6 +96,8 @@ new_clean = pipeline.apply(new_df)
 | `target_leakage` | features with near-perfect association to the target |
 | `id_column` | identifiers accidentally left in the features |
 | `missing_values` / `missing_target` | gaps by column, unlabeled rows |
+| `informative_missingness` | gaps whose pattern predicts the target |
+| `disguised_missing` | sentinels like `-999` or `'unknown'` standing in for NaN |
 | `duplicate_rows` | exact duplicates (and duplicates hiding behind ids) |
 | `constant_column` / `quasi_constant_column` | zero-signal columns |
 | `class_imbalance` / `rare_classes` | skewed and under-represented labels |
@@ -84,6 +105,10 @@ new_clean = pipeline.apply(new_df)
 | `high_cardinality` | categorical columns one-hot would explode on |
 | `mixed_types` / `numeric_stored_as_text` | dtype traps |
 | `whitespace_padding` / `case_inconsistency` | `' yes'` vs `'yes'` categories |
+
+Run a subset with `audit(df, checks=["leakage", "duplicates"])` or drop noisy
+ones with `skip=["outliers"]`. A check that fails on strange data never aborts
+the audit — it comes back as a `check_error` finding and the rest still run.
 
 ## Cleaning strategies
 
@@ -103,8 +128,8 @@ mlclean audit data.csv --target churn --json report.json --fail-on high   # CI g
 
 ## Roadmap
 
+- [x] scikit-learn-style `MLCleaner` transformer (fit on train, transform test)
 - [ ] `compare_train_test(X_train, X_test, ...)` — split consistency audit
-- [ ] scikit-learn `MLCleaner` transformer (fit on train, transform test)
 - [ ] HTML report
 - [ ] Correlation / multicollinearity warnings
 - [ ] Polars support
