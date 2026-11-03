@@ -17,9 +17,15 @@
   planned range would wrap (numpy casts 1000 to -24 in int8), and a category
   the plan never saw would become NaN at inference time. Pass
   `on_unseen="nan"` for pandas' own behavior.
-- `footprint()` measures object columns in place and estimates category cost
-  from distinct values, so diagnosing a memory problem does not allocate the
-  memory the caller is short of.
+- `footprint()` estimates rather than converts, and tests float32 exactness in
+  one-million-row blocks, so the extra memory it needs is bounded by the block
+  size instead of the size of the frame: measured flat at 19.1 MB for a float
+  column of 22.9 MB and of 91.6 MB.
+- Replaying a plan also raises when a column the plan was built with is
+  missing from the frame (`on_missing="ignore"` to proceed). Plans record
+  every column they saw, not only the ones they change.
+- Object columns holding anything other than strings are left alone instead of
+  being coerced into categories.
 
 ## 0.2.0 — 2026-11-02
 

@@ -125,44 +125,81 @@ Never silently destructive — every change is a recorded step with a reason.
 pandas stores every whole number as int64, every decimal as float64 and every
 string as a Python object. A column of ages needs one byte per row and gets
 eight; a column of `'yes'` and `'no'` stores two distinct strings a million
-times over. On the Telco churn dataset that is 6.82 MB of RAM for 0.94 MB of
-data — 86% waste, and the reason a dataset that should fit raises
-`MemoryError`.
+times over. On the Telco churn dataset that is 6.82 MB of RAM holding 0.94 MB
+of data — 86% waste.
 
 ```python
 from mlclean import footprint, dtype_plan, optimize_dtypes
 
-footprint(df)                 # measure; converts and copies nothing
+footprint(df)                 # what it costs now vs what it could cost
 small = optimize_dtypes(df)   # one-off: 6.82 MB -> 0.94 MB
 ```
 
-The usual fix is a downcasting loop copied from a notebook, and it has two
-problems. It chooses dtypes from *this* frame's min and max, so training data
-and a later batch end up with different dtypes for the same column and the
-model is handed a feature type it was never fit on. And it converts float64
-to float32 unconditionally, changing values without saying so.
+**What this does not do.** It shrinks a frame you can already load; it does
+not rescue one you cannot. `optimize_dtypes` runs after pandas has already
+materialized those int64 columns, so if a file will not fit in memory,
+`read_csv(dtype=...)` or chunked reading is strictly better — run
+`footprint()` on a sample to work out what to pass.
 
-So the unit here is a plan, decided once and replayed:
+### Correctness first
+
+Narrowing dtypes is easy to do and easy to do wrong, and the widely copied
+notebook versions do it wrong in ways that are hard to notice:
+
+- **float64 becomes float32 only where every value round-trips exactly.**
+  Tolerance-based checks are not enough: `np.allclose` calls `6082025490` and
+  `6082025491` equal under float32 at `atol=5e-8`, so a tool gated on
+  tolerance will silently merge two distinct IDs. mlclean compares for exact
+  equality and leaves the column alone, or you pass
+  `allow_lossy_float=True` and own the trade.
+- **`category` only when it measurably saves bytes.** A column whose values
+  are nearly all distinct costs *more* as a category than as text, because
+  the categories themselves have to be stored. mlclean estimates the real
+  byte cost and declines when it is not a win.
+- **Unsigned integers are opt-in** (`allow_unsigned=True`). `uint8` halves
+  many 0-based columns, but a later subtraction underflows to 255 instead of
+  going negative.
+- **Object columns that hold anything but strings are left alone** rather
+  than coerced into categories.
+
+### One plan, replayed
+
+Dtypes chosen from whatever frame is at hand diverge between training and
+serving, which hands the model a feature type it was never fit on. So the
+decision is made once and replayed:
 
 ```python
-plan = dtype_plan(train_df)            # decide dtypes on the training data
-json.dump(plan, open("dtypes.json", "w"))   # ships beside the model
+plan = dtype_plan(train_df)
+json.dump(plan, open("dtypes.json", "w"))   # plain dict; ships with the model
 
 small_train = optimize_dtypes(train_df, plan)
-small_batch = optimize_dtypes(new_batch, plan)   # identical dtypes, guaranteed
+small_batch = optimize_dtypes(new_batch, plan)   # identical dtypes
 ```
 
-Only provably lossless conversions are planned by default. float64 becomes
-float32 only when every value survives the round-trip exactly; pass
-`allow_lossy_float=True` to override. Unsigned integers are opt-in via
-`allow_unsigned=True`, because `uint8` halves many 0-based columns but makes a
-later subtraction underflow to 255 instead of going negative.
+Replay refuses to corrupt rather than doing it quietly:
 
-Replay refuses to corrupt data rather than doing it quietly. A value outside
-the planned integer range raises instead of wrapping (numpy turns 1000 into
--24 in int8 without complaint), and a category the plan never saw raises
-instead of silently becoming NaN at inference time — pass `on_unseen="nan"`
-if you want pandas' own behavior.
+- an integer outside the planned range raises instead of wrapping — numpy
+  turns `1000` into `-24` in int8 without complaint
+- a category the plan never saw raises instead of becoming NaN mid-inference
+  (`on_unseen="nan"` for pandas' own behavior)
+- a column the plan was built with but that is missing now raises
+  (`on_missing="ignore"` to proceed); columns the plan never saw pass through
+  untouched
+
+Note that recent XGBoost and LightGBM align `category` dtypes themselves, so
+the category half of this matters most for scikit-learn, hand-rolled
+`.cat.codes` features, and CSV/parquet round trips — a CSV does not remember
+that a column was categorical. Integer and float widths are not replayed by
+any of them.
+
+### Hazards worth knowing
+
+- Narrow integers overflow on arithmetic, signed or not: an `int16` column
+  times 1000 wraps negative, silently. Narrow what you feed a model, not what
+  you still compute with.
+- Run this *after* imputation. Assigning one NaN to an `int16` column turns it
+  back into float64 and the saving is gone.
+- `concat` with an unplanned frame degrades a `category` column back to text.
 
 ## CLI
 

@@ -148,3 +148,45 @@ def test_object_column_of_non_strings_is_left_alone():
     df = pd.DataFrame({"mixed": ([1, "a", 2.5] * 400)})
     assert dtype_plan(df)["columns"] == {}
     assert optimize_dtypes(df)["mixed"].dtype == object
+
+
+def test_mixed_object_column_past_the_first_rows_does_not_crash():
+    """A stray non-string deep in a text column used to raise TypeError."""
+    df = pd.DataFrame({"country": pd.Series(["US"] * 4999 + [0], dtype=object)})
+    assert dtype_plan(df)["columns"] == {}
+    assert footprint(df)["saved_bytes"] == 0
+    # and the audit must not lose the check to its own crash guard
+    assert "check_error" not in [i.check for i in audit(df).issues]
+
+
+def test_plan_records_every_column_it_saw():
+    df = pd.DataFrame({"age": np.arange(1000) % 100, "noise": [0.1] * 1000})
+    plan = dtype_plan(df)
+    assert plan["columns_seen"] == ["age", "noise"]
+    assert plan["columns"]["age"]["dtype"] == "int8"
+    # 0.1 does not survive a float32 round-trip, so noise is seen but
+    # deliberately left unplanned
+    assert "noise" not in plan["columns"]
+
+
+def test_missing_column_raises_on_replay(wasteful):
+    plan = dtype_plan(wasteful)
+    without_city = wasteful.drop(columns=["city"])
+    with pytest.raises(ValueError, match="missing from this frame"):
+        optimize_dtypes(without_city, plan)
+    relaxed = optimize_dtypes(without_city, plan, on_missing="ignore")
+    assert relaxed["age"].dtype == np.int8
+
+
+def test_extra_columns_pass_through(wasteful):
+    plan = dtype_plan(wasteful)
+    wider = wasteful.copy()
+    wider["engineered"] = 1.0
+    out = optimize_dtypes(wider, plan)
+    assert out["engineered"].dtype == np.float64
+    assert out["age"].dtype == np.int8
+
+
+def test_rejects_unknown_on_missing(wasteful):
+    with pytest.raises(ValueError, match="on_missing"):
+        optimize_dtypes(wasteful, on_missing="shrug")

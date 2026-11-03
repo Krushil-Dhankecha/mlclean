@@ -59,29 +59,46 @@ def _int_target(series: pd.Series, allow_unsigned: bool) -> str | None:
     return None
 
 
+_EXACTNESS_BLOCK = 1_000_000
+
+
 def _float_is_exact_in_32(series: pd.Series) -> bool:
-    """True when float32 round-trips every value without changing it."""
-    values = series.dropna()
-    if values.empty:
-        return True
-    original = values.to_numpy()
-    return bool(np.array_equal(original.astype(np.float32).astype(original.dtype), original))
+    """True when float32 round-trips every value without changing it.
+
+    Walked in blocks rather than all at once: the caller is by definition
+    short of memory, so the check must not allocate a second copy of a
+    large column to answer a yes/no question.
+    """
+    arr = series.to_numpy()
+    for start in range(0, arr.size, _EXACTNESS_BLOCK):
+        block = arr[start : start + _EXACTNESS_BLOCK]
+        finite = block[~np.isnan(block)]
+        if finite.size == 0:
+            continue
+        if not np.array_equal(finite.astype(np.float32).astype(finite.dtype), finite):
+            return False
+    return True
 
 
-def _category_cost(series: pd.Series) -> tuple[int, int] | None:
-    """(distinct values, estimated bytes as a category column).
+def _category_plan(series: pd.Series) -> dict[str, Any] | None:
+    """Distinct values, estimated category bytes, and the category list.
 
     Estimated rather than measured: converting a large object column to
     find out what it would cost allocates the very memory the caller is
-    short of.
+    short of. ``unique()`` returns only the distinct values, so the whole
+    column is never copied.
     """
-    uniques = pd.Series(series.dropna().unique())
+    uniques = pd.Series(series.unique()).dropna()
     distinct = len(uniques)
     if distinct == 0:
         return None
     codes_itemsize = 1 if distinct <= 127 else (2 if distinct <= 32767 else 4)
-    estimated = int(uniques.memory_usage(deep=True)) + len(series) * codes_itemsize
-    return distinct, estimated
+    return {
+        "distinct": distinct,
+        "estimated": int(uniques.memory_usage(deep=True))
+        + len(series) * codes_itemsize,
+        "categories": sorted(uniques),
+    }
 
 
 def _decide(
@@ -121,24 +138,24 @@ def _decide(
             return None
 
     if allow_category and _is_text(series):
-        values = series.dropna()
-        # an object column holding non-strings would have to be coerced to
-        # become a category, and a silent type change is not a saving
-        if not all(isinstance(v, str) for v in values.head(1000)):
+        # an object column holding anything but strings is a dtype problem
+        # for the mixed_types check, not a column to quietly re-encode.
+        # infer_dtype scans in C; sampling the head would miss a stray
+        # value further down and then blow up sorting the categories
+        if pd.api.types.infer_dtype(series, skipna=True) != "string":
             return None
-        cost = _category_cost(series)
-        if cost is None:
+        planned = _category_plan(series)
+        if planned is None:
             return None
-        distinct, estimated = cost
-        if n_rows and distinct / n_rows > CATEGORY_MAX_UNIQUE_RATE:
+        if n_rows and planned["distinct"] / n_rows > CATEGORY_MAX_UNIQUE_RATE:
             return None
-        if estimated >= current:
+        if planned["estimated"] >= current:
             return None
         return {
             "dtype": "category",
-            "categories": sorted(values.unique()),
+            "categories": planned["categories"],
             "current_bytes": current,
-            "estimated_bytes": estimated,
+            "estimated_bytes": planned["estimated"],
             "lossy": False,
         }
     return None
@@ -154,9 +171,11 @@ def footprint(
 ) -> dict[str, Any]:
     """Measure what the frame costs now and what it could cost.
 
-    Nothing is converted and nothing is copied: object columns are measured
-    in place, and the cost of a `category` column is estimated from its
-    distinct values.
+    No column is converted. Measuring still costs a little memory — the
+    float32 exactness test walks a column in one-million-row blocks, and
+    text columns are measured from their distinct values — but the extra
+    allocation is bounded by the block size rather than by the size of the
+    frame.
 
     Returns:
         A dict with ``current_bytes``, ``optimized_bytes``, ``saved_bytes``,
@@ -221,6 +240,12 @@ def dtype_plan(
             the width of many 0-based columns, but later subtraction
             underflows to a huge positive number instead of going negative,
             so it is off by default.
+
+    Narrow integers overflow on arithmetic whether signed or not: an int16
+    column multiplied by 1000 wraps negative, silently. Narrow the storage
+    of columns you feed to a model, not ones you still compute with. Run
+    this after imputation, too — a single NaN assigned to an int16 column
+    turns it back into float64 and the saving is gone.
         allow_lossy_float: Let float64 become float32 even when that changes
             values. Off by default; float64 columns whose values survive the
             round-trip exactly are downcast either way.
@@ -229,7 +254,9 @@ def dtype_plan(
         ignore_columns: Columns to leave exactly as they are.
 
     Returns:
-        A JSON-serializable plan: ``{"version": 1, "columns": {name: spec}}``.
+        A JSON-serializable plan. ``columns`` holds only the columns worth
+        changing; ``columns_seen`` records every column the frame had, so
+        replaying can tell when a later frame does not match.
     """
     skip = set(ignore_columns)
     columns: dict[str, dict[str, Any]] = {}
@@ -250,7 +277,11 @@ def dtype_plan(
         if decision["lossy"]:
             spec["lossy"] = True
         columns[column] = spec
-    return {"version": PLAN_VERSION, "columns": columns}
+    return {
+        "version": PLAN_VERSION,
+        "columns": columns,
+        "columns_seen": [str(c) for c in df.columns],
+    }
 
 
 def _assert_fits(series: pd.Series, target: str, column: str) -> None:
@@ -295,6 +326,7 @@ def optimize_dtypes(
     allow_category: bool = True,
     ignore_columns: tuple[str, ...] = (),
     on_unseen: str = "raise",
+    on_missing: str = "raise",
 ) -> pd.DataFrame:
     """Return a copy of the frame using cheaper dtypes.
 
@@ -308,13 +340,24 @@ def optimize_dtypes(
             behavior and turns them into NaN. The default is loud because
             silently NaN-ing unseen categories at inference time is the bug
             this function exists to prevent.
+        on_missing: What to do when the frame lacks a column the plan's
+            frame had. ``"raise"`` (default) names them; ``"ignore"`` applies
+            the plan to whatever is present. Columns the plan never saw are
+            passed through untouched either way.
 
     Raises:
-        ValueError: on an unknown ``on_unseen``, a plan version this release
-            cannot read, or an unseen category under ``on_unseen="raise"``.
+        ValueError: on an unknown ``on_unseen`` or ``on_missing``, a plan
+            version this release cannot read, a missing column under
+            ``on_missing="raise"``, an unseen category under
+            ``on_unseen="raise"``, or a value that would not survive the
+            planned dtype.
     """
     if on_unseen not in ("raise", "nan"):
         raise ValueError(f"on_unseen must be 'raise' or 'nan', got '{on_unseen}'")
+    if on_missing not in ("raise", "ignore"):
+        raise ValueError(
+            f"on_missing must be 'raise' or 'ignore', got '{on_missing}'"
+        )
     if plan is None:
         plan = dtype_plan(
             df,
@@ -329,6 +372,21 @@ def optimize_dtypes(
             f"plan version {version} was written by a newer mlclean; "
             f"this release reads up to version {PLAN_VERSION}"
         )
+
+    if on_missing == "raise":
+        # the plan records every column it saw, not just the ones it
+        # changed: a frame missing one of them is not the frame the model
+        # was fit on, and that is worth hearing about before inference
+        expected = set(plan.get("columns_seen") or plan.get("columns", {}))
+        absent = sorted(expected - {str(c) for c in df.columns})
+        if absent:
+            shown = ", ".join(repr(c) for c in absent[:5])
+            more = f" (and {len(absent) - 5} more)" if len(absent) > 5 else ""
+            raise ValueError(
+                f"{len(absent)} column(s) the plan was built with are missing "
+                f"from this frame: {shown}{more}. Pass on_missing='ignore' to "
+                "apply the plan to the columns that are present."
+            )
 
     out = df.copy()
     for column, spec in plan.get("columns", {}).items():
