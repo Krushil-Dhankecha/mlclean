@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased
+
+- New check `memory_footprint`: reports how much of a frame's RAM is pandas
+  defaults rather than data, with the columns responsible. On the Telco churn
+  dataset: 6.82 MB holding 0.94 MB of data.
+- New `footprint()`, `dtype_plan()` and `optimize_dtypes()`. The dtype plan is
+  decided once on the training frame and replayed, so a later batch cannot
+  pick its own dtypes and hand the model a feature type it was not fit on.
+  The plan is a plain dict and serializes to JSON.
+- Only provably lossless conversions are planned by default: float64 becomes
+  float32 only where every value round-trips exactly (`allow_lossy_float=True`
+  to override), and unsigned integers are opt-in (`allow_unsigned=True`) since
+  `uint8` makes later subtraction underflow.
+- Replaying a plan raises rather than corrupting: an integer outside the
+  planned range would wrap (numpy casts 1000 to -24 in int8), and a category
+  the plan never saw would become NaN at inference time. Pass
+  `on_unseen="nan"` for pandas' own behavior.
+- `footprint()` measures object columns in place and estimates category cost
+  from distinct values, so diagnosing a memory problem does not allocate the
+  memory the caller is short of.
+
 ## 0.2.0 — 2026-11-02
 
 - New check `disguised_missing`: sentinel values standing in for nulls —

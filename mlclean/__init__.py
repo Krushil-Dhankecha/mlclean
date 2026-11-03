@@ -3,6 +3,7 @@
 from mlclean.audit import audit
 from mlclean.cleaning import CleaningPipeline, CleaningStep
 from mlclean.issues import DataIssue
+from mlclean.memory import dtype_plan, footprint, optimize_dtypes
 from mlclean.report import AuditReport
 from mlclean.transformer import MLCleaner
 
@@ -16,4 +17,7 @@ __all__ = [
     "MLCleaner",
     "__version__",
     "audit",
+    "dtype_plan",
+    "footprint",
+    "optimize_dtypes",
 ]
