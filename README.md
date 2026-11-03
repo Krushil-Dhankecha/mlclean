@@ -94,6 +94,7 @@ convention, it doesn't import the library.
 | Check | What it catches |
 |---|---|
 | `target_leakage` | features with near-perfect association to the target |
+| `target_leakage_suspect` | strong association worth checking the timeline of |
 | `id_column` | identifiers accidentally left in the features |
 | `missing_values` / `missing_target` | gaps by column, unlabeled rows |
 | `informative_missingness` | gaps whose pattern predicts the target |

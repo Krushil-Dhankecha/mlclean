@@ -200,3 +200,84 @@ def test_ignore_columns_are_skipped():
     df = pd.DataFrame({"noisy": [1] * 100, "x": np.arange(100)})
     report = audit(df, ignore_columns=["noisy"])
     assert all("noisy" not in i.columns for i in report.issues)
+
+
+# --- target leakage: measure routing -----------------------------------------
+
+
+def _leakage(df, target="y"):
+    report = audit(df, target=target, checks=["leakage"])
+    return {i.check: i for i in report.issues}
+
+
+def test_low_cardinality_integer_target_is_not_scored_by_correlation():
+    """Correlation measures linear association, so it misses a relationship
+    that is deterministic but not monotone. That is why an integer target
+    with few distinct values must not be routed to Pearson."""
+    y = np.array([0, 1, 2] * 200)
+    leak = pd.Series(y).map({0: 10, 1: 0, 2: 5}).to_numpy()  # bijective, not monotone
+    df = pd.DataFrame({"leak": leak, "y": y})
+
+    pearson = abs(float(pd.Series(leak).corr(pd.Series(y))))
+    assert pearson < 0.95, "fixture must be out of reach of a correlation gate"
+
+    issue = _leakage(df)["target_leakage"]
+    assert issue.severity == "critical"
+    assert issue.details["measure"] == "normalized mutual information"
+    assert issue.details["score"] == 1.0
+
+
+def test_continuous_feature_against_binary_target_is_not_skipped_as_an_id():
+    """A leaked score is near-unique like an identifier, but it gets binned
+    into deciles first, so its score is meaningful and it must be reported."""
+    rng = np.random.default_rng(2)
+    y = rng.integers(0, 2, 600)
+    score = y + rng.uniform(0, 0.4, 600)  # separable, every value distinct
+    df = pd.DataFrame({"leaked_score": score, "y": y})
+
+    assert pd.Series(score).nunique() > 0.8 * len(score), "fixture must be id-shaped"
+
+    found = _leakage(df)
+    assert found, "a near-perfect leaked score must not be skipped as an id"
+    issue = next(iter(found.values()))
+    assert issue.columns == ["leaked_score"]
+    assert issue.details["score"] > 0.9
+
+
+def test_moderate_association_is_reported_as_a_suspect():
+    y = np.array([0, 1] * 400)
+    noisy = y.copy()
+    flipped = np.arange(0, 800, 20)  # 5% of the labels
+    noisy[flipped] = 1 - noisy[flipped]
+    df = pd.DataFrame({"noisy": noisy, "y": y})
+
+    issue = _leakage(df)["target_leakage_suspect"]
+    assert issue.severity == "medium"
+    assert 0.70 <= issue.details["score"] < 0.95
+
+
+def test_independent_feature_is_left_alone():
+    rng = np.random.default_rng(4)
+    df = pd.DataFrame(
+        {"noise": rng.normal(size=600), "y": rng.integers(0, 2, 600)}
+    )
+    assert _leakage(df) == {}
+
+
+def test_identifier_string_column_is_still_skipped():
+    rng = np.random.default_rng(5)
+    n = 300
+    df = pd.DataFrame(
+        {"uuid": [f"id-{i}" for i in range(n)], "y": rng.integers(0, 2, n)}
+    )
+    assert _leakage(df) == {}
+
+
+def test_continuous_target_still_uses_correlation():
+    rng = np.random.default_rng(6)
+    y = rng.normal(size=400)
+    df = pd.DataFrame({"copy": y * 2 + 1, "y": y})
+    found = _leakage(df)
+    assert found["target_leakage"].details["measure"] == (
+        "absolute Pearson correlation"
+    )

@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+- Fixed: the target-leakage check could not fire on a low-cardinality integer
+  target. Any numeric non-bool target routed numeric features to Pearson
+  correlation, which measures only linear association and is bounded well
+  below the 0.95 threshold between two low-cardinality columns — so the check
+  was effectively off for 0/1 integer targets, the commonest shape in
+  classification. Association now goes to mutual information unless *both*
+  columns are genuinely continuous. A deterministic non-monotone relationship
+  scored 0.5 by correlation and scores 1.0 by mutual information.
+- Fixed: a continuous feature is no longer skipped as identifier-shaped. Such
+  a column is near-unique, but it is binned into deciles before scoring, so a
+  leaked probability or score column is now reported instead of ignored.
+- New finding `target_leakage_suspect` (medium): association at or above 0.70
+  but short of the near-perfect range. Previously anything under 0.95 produced
+  no output at all, so a feature explaining 78% of the target's entropy was
+  reported as nothing.
+
 ## 0.2.0 — 2026-11-02
 
 - New check `disguised_missing`: sentinel values standing in for nulls —
