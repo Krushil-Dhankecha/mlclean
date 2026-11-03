@@ -121,6 +121,11 @@ def _decide(
             return None
 
     if allow_category and _is_text(series):
+        values = series.dropna()
+        # an object column holding non-strings would have to be coerced to
+        # become a category, and a silent type change is not a saving
+        if not all(isinstance(v, str) for v in values.head(1000)):
+            return None
         cost = _category_cost(series)
         if cost is None:
             return None
@@ -131,7 +136,7 @@ def _decide(
             return None
         return {
             "dtype": "category",
-            "categories": [str(v) for v in sorted(series.dropna().unique(), key=str)],
+            "categories": sorted(values.unique()),
             "current_bytes": current,
             "estimated_bytes": estimated,
             "lossy": False,
@@ -333,8 +338,8 @@ def optimize_dtypes(
         if target == "category":
             categories = spec.get("categories", [])
             known = set(categories)
-            present = out[column].dropna().map(str)
-            unseen = sorted(set(present[~present.isin(known)]))
+            present = out[column].dropna()
+            unseen = sorted({v for v in present[~present.isin(known)]}, key=str)
             if unseen and on_unseen == "raise":
                 shown = ", ".join(repr(v) for v in unseen[:5])
                 more = f" (and {len(unseen) - 5} more)" if len(unseen) > 5 else ""
@@ -344,12 +349,16 @@ def optimize_dtypes(
                     "data. Rebuild it, add these to the plan's categories, or "
                     "pass on_unseen='nan' to accept them becoming NaN."
                 )
-            mapped = out[column].map(lambda v: str(v) if pd.notna(v) else v)
+            column_values = out[column]
             if unseen:
                 # pandas deprecates building a Categorical from values the
                 # dtype does not list, so blank them explicitly
-                mapped = mapped.where(mapped.isin(known) | mapped.isna(), np.nan)
-            out[column] = mapped.astype(pd.CategoricalDtype(categories=categories))
+                column_values = column_values.where(
+                    column_values.isin(known) | column_values.isna(), np.nan
+                )
+            out[column] = column_values.astype(
+                pd.CategoricalDtype(categories=categories)
+            )
         else:
             _assert_fits(out[column], target, column)
             out[column] = out[column].astype(target)

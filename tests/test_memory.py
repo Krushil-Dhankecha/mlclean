@@ -141,3 +141,10 @@ def test_audit_reports_the_footprint(wasteful):
 def test_audit_stays_quiet_on_a_small_frame():
     df = pd.DataFrame({"a": [1, 2, 3], "b": ["x", "y", "z"]})
     assert audit(df, checks=["memory"]).issues == []
+
+
+def test_object_column_of_non_strings_is_left_alone():
+    """Coercing mixed objects to category would change types, not just size."""
+    df = pd.DataFrame({"mixed": ([1, "a", 2.5] * 400)})
+    assert dtype_plan(df)["columns"] == {}
+    assert optimize_dtypes(df)["mixed"].dtype == object
