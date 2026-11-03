@@ -1,9 +1,24 @@
 # mlclean roadmap
 
 Written 2026-11-03 against the product brief, informed by
-[`product_audit.md`](product_audit.md). This document is a proposal: it is
+[`product_audit.md`](product_audit.md). This document is
 opinionated on purpose, and it declines several items from the brief with
-reasons. Nothing here is implemented yet.
+reasons.
+
+## Status
+
+Approved 2026-11-03 with three decisions, all as recommended below:
+
+1. **Scope** — the decline list stands. No encoders or scalers, no service
+   mode, no PII masking beyond detect-and-flag, no LLM explanations, no Polars
+   rewrite.
+2. **API shape** — module-level `profile()` / `clean()` / `validate()` beside
+   the existing `audit()`. `MLCleaner` stays as it is, a fit/transform
+   estimator.
+3. **Phase 1 order** — bugs before reach.
+
+Work started: leakage routing and the MEDIUM association tier (items 1 and 2
+of Phase 1a).
 
 ---
 
