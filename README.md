@@ -152,6 +152,12 @@ notebook versions do it wrong in ways that are hard to notice:
   tolerance will silently merge two distinct IDs. mlclean compares for exact
   equality and leaves the column alone, or you pass
   `allow_lossy_float=True` and own the trade.
+- **float16 is never used**, whatever the range of values. It merges distinct
+  numbers wholesale — `[50001.0, 50002.0, 50003.0, 50004.0]` all become
+  `50016.0`, four ids collapsing into one — and a numpy reduction over a
+  float16 array overflows to `inf`. The notebook function that popularized
+  downcasting tries float16 *first*, deciding on range alone, which is how
+  this reaches so many pipelines.
 - **`category` only when it measurably saves bytes.** A column whose values
   are nearly all distinct costs *more* as a category than as text, because
   the categories themselves have to be stored. mlclean estimates the real
