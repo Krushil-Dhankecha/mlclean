@@ -2,6 +2,7 @@
 returns a list of DataIssue."""
 
 from mlclean.checks.duplicates import check_duplicates
+from mlclean.checks.footprint import check_memory_footprint
 from mlclean.checks.imbalance import check_class_imbalance
 from mlclean.checks.leakage import check_target_leakage
 from mlclean.checks.missing import check_informative_missingness, check_missing
@@ -29,6 +30,7 @@ CHECKS = {
     "outliers": check_outliers,
     "imbalance": check_class_imbalance,
     "leakage": check_target_leakage,
+    "memory": check_memory_footprint,
 }
 
 ALL_CHECKS = list(CHECKS.values())
@@ -43,6 +45,7 @@ __all__ = [
     "check_high_cardinality",
     "check_id_columns",
     "check_informative_missingness",
+    "check_memory_footprint",
     "check_missing",
     "check_mixed_types",
     "check_outliers",
