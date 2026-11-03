@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Internal restructure: `checks/types.py` is split into one module per
+  concern — `constant`, `identifiers`, `dtypes`, `text`, `cardinality` —
+  with the shared `is_textual` helper in `checks/_common.py`. No behavior
+  change; check names and the `checks=`/`skip=` selectors are unchanged.
+
 ## 0.2.0 — 2026-11-02
 
 - New check `disguised_missing`: sentinel values standing in for nulls —

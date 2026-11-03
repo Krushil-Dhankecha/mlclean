@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from mlclean.checks.types import _is_textual
+from mlclean.checks._common import is_textual
 from mlclean.issues import MEDIUM, DataIssue
 
 _NUMERIC_SENTINELS = {
@@ -77,7 +77,7 @@ def check_disguised_missing(df: pd.DataFrame, ctx) -> list[DataIssue]:
                         details={"values": {str(int(v)): c for v, c in suspects}},
                     )
                 )
-        elif _is_textual(series):
+        elif is_textual(series):
             values = series[series.map(lambda v: isinstance(v, str))]
             if values.empty:
                 continue
