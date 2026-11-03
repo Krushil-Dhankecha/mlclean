@@ -1,10 +1,15 @@
 """Target-leakage heuristics.
 
-v0 strategy: flag features whose association with the target is so strong it
-usually means the feature is derived from, or recorded after, the outcome.
-Association is measured without sklearn: absolute Pearson correlation for
-numeric-vs-numeric, and normalized mutual information computed from a
-contingency table for everything else (numerics binned by decile).
+Flag features whose association with the target is so strong it usually means
+the feature is derived from, or recorded after, the outcome.
+
+Association is measured without sklearn, and *which* measure matters more than
+it looks. Pearson correlation is only meaningful between two columns that are
+genuinely continuous: between two binary columns it is bounded well below 1
+however deterministic the relationship, so a correlation threshold can never
+fire on a 0/1 target — which is most classification data. Anything that is not
+continuous on both sides therefore goes to normalized mutual information,
+computed from a contingency table with continuous columns binned by decile.
 """
 
 from __future__ import annotations
@@ -12,9 +17,13 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from mlclean.issues import CRITICAL, HIGH, DataIssue
+from mlclean.issues import CRITICAL, HIGH, MEDIUM, DataIssue
 
+# almost certainly leakage
 ASSOCIATION_FLAG = 0.95
+# strong enough to be worth checking the timeline of, not strong enough to
+# call a defect: a real feature can legitimately score here
+ASSOCIATION_WATCH = 0.70
 BINS = 10
 
 
@@ -25,6 +34,20 @@ def _binned(series: pd.Series) -> pd.Series:
         except (ValueError, IndexError):
             return series.astype(str)
     return series.astype(str)
+
+
+def _is_continuous(series: pd.Series) -> bool:
+    """Numeric with enough distinct values for correlation to mean anything.
+
+    The cutoff is the binning threshold on purpose: a numeric column with
+    fewer distinct values than that is treated as categorical everywhere in
+    this module.
+    """
+    return (
+        pd.api.types.is_numeric_dtype(series)
+        and not pd.api.types.is_bool_dtype(series)
+        and series.nunique() > BINS
+    )
 
 
 def _normalized_mutual_information(x: pd.Series, y: pd.Series) -> float:
@@ -50,9 +73,7 @@ def check_target_leakage(df: pd.DataFrame, ctx) -> list[DataIssue]:
     if target.dropna().nunique() < 2 or len(df) < 50:
         return issues
 
-    numeric_target = pd.api.types.is_numeric_dtype(target) and not (
-        pd.api.types.is_bool_dtype(target)
-    )
+    continuous_target = _is_continuous(target)
 
     for column in ctx.feature_columns(df):
         if column in ctx.id_columns:
@@ -65,17 +86,17 @@ def check_target_leakage(df: pd.DataFrame, ctx) -> list[DataIssue]:
         n_unique = feature_vals.nunique()
         if n_unique < 2:
             continue
+        continuous_feature = _is_continuous(feature_vals)
         # near-unique features (identifiers) make mutual information
-        # trivially perfect; they are the id-column check's business
-        id_shaped = n_unique > 0.8 * len(pair)
+        # trivially perfect; they are the id-column check's business. A
+        # continuous column is also near-unique but gets binned into deciles
+        # first, so its score is meaningful and it must not be skipped —
+        # a leaked probability or score column looks exactly like this.
+        id_shaped = n_unique > 0.8 * len(pair) and not continuous_feature
 
         score = None
         measure = None
-        if (
-            numeric_target
-            and pd.api.types.is_numeric_dtype(feature_vals)
-            and not pd.api.types.is_bool_dtype(feature_vals)
-        ):
+        if continuous_feature and continuous_target:
             corr = feature_vals.corr(target_vals)
             if pd.notna(corr):
                 score, measure = abs(float(corr)), "absolute Pearson correlation"
@@ -102,6 +123,26 @@ def check_target_leakage(df: pd.DataFrame, ctx) -> list[DataIssue]:
                     recommendation=(
                         "Verify the business timeline: if the value exists only "
                         "after the prediction moment, remove it from the features."
+                    ),
+                    details={"score": round(score, 4), "measure": measure},
+                )
+            )
+        elif score >= ASSOCIATION_WATCH:
+            issues.append(
+                DataIssue(
+                    check="target_leakage_suspect",
+                    severity=MEDIUM,
+                    columns=[column],
+                    message=(
+                        f"'{column}' is strongly associated with target "
+                        f"'{ctx.target}' ({measure} = {score:.3f}) — short of "
+                        "the near-perfect range, but more than most honest "
+                        "features manage."
+                    ),
+                    recommendation=(
+                        "Check when this value becomes known. Available before "
+                        "the prediction moment, it is a good feature; only "
+                        "available afterwards, it is leakage."
                     ),
                     details={"score": round(score, 4), "measure": measure},
                 )
