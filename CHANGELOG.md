@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Internal restructure: `report.py` is now the `mlclean.report` package
+  (one module per output format) and `cleaning.py` the `mlclean.cleaning`
+  package (`pipeline`, `steps`, `strategies`). No behavior change; all
+  public imports keep working.
+
 ## 0.2.0 — 2026-11-02
 
 - New check `disguised_missing`: sentinel values standing in for nulls —

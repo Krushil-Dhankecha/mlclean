@@ -13,6 +13,8 @@ INFO = "info"
 
 SEVERITY_ORDER = [CRITICAL, HIGH, MEDIUM, LOW, INFO]
 
+SEVERITY_LABEL = {name: name.upper() for name in SEVERITY_ORDER}
+
 
 @dataclass
 class DataIssue:
