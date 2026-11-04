@@ -16,6 +16,11 @@ _TEXT_SENTINELS = {
     "", "na", "n/a", "none", "null", "nan", "nil", "missing",
     "unknown", "undefined", "?", "-", "--", ".",
 }
+# a blank string is never a real category, so one of them is already a finding;
+# the others ("unknown", "-") can be legitimate values, and need a share of the
+# column behind them before they are worth reporting
+_ALWAYS_REPORTED = {""}
+_TEXT_SENTINEL_RATE = 0.005
 
 
 def _detached(value: float, others: pd.Series) -> bool:
@@ -83,7 +88,10 @@ def check_disguised_missing(df: pd.DataFrame, ctx) -> list[DataIssue]:
                 continue
             lowered = values.str.strip().str.lower()
             hits = lowered[lowered.isin(_TEXT_SENTINELS)]
-            if len(hits) and len(hits) / len(values) >= 0.005:
+            blank = hits.isin(_ALWAYS_REPORTED).any()
+            if len(hits) and (
+                blank or len(hits) / len(values) >= _TEXT_SENTINEL_RATE
+            ):
                 found = sorted(hits.unique())
                 issues.append(
                     DataIssue(

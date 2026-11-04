@@ -41,6 +41,21 @@ def test_text_sentinels_detected():
     assert set(found[0].details["tokens"]) == {"unknown", "n/a"}
 
 
+def test_rare_blanks_are_still_reported():
+    # Telco's TotalCharges: 11 blank strings in 7,043 rows (0.16%), well under
+    # the rate floor that keeps rare "unknown"-style values quiet
+    values = ["29.85"] * 7032 + [" "] * 11
+    report = audit(pd.DataFrame({"TotalCharges": values}))
+    found = issues_for(report, "disguised_missing")
+    assert found and found[0].details["count"] == 11
+
+
+def test_rare_unknowns_stay_quiet():
+    city = ["surat"] * 995 + ["unknown"] * 2 + ["mumbai"] * 3
+    report = audit(pd.DataFrame({"city": city}))
+    assert issues_for(report, "disguised_missing") == []
+
+
 # --------------------------------------------------- informative_missingness
 def test_missingness_that_tracks_the_target():
     rng = np.random.default_rng(2)
