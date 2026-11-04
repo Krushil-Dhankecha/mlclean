@@ -89,10 +89,13 @@ wrong and the documented example hides the mismatch.
 
 **Enhancement — nothing tests the declared pandas floor (P1).**
 `pyproject.toml` promises `pandas>=1.5`; CI resolves the newest pandas per Python
-version, so the floor has never run. Attempting a pandas 1.5.3 environment locally hit
-PyPI read timeouts and did not finish, so whether the claim holds is still unknown —
-that uncertainty is the finding. Either a CI job pins the floor or the floor should be
-raised to something that is actually exercised.
+version, so the floor had never run. It does now, locally: 60 tests pass on pandas 1.5.3
+with numpy 1.26.4 under Python 3.11, pandas' own numpy DeprecationWarnings aside. So the
+code is fine and the claim is loose rather than false — `pandas>=1.5` with `numpy>=1.23`
+describes combinations that break, because `pip install "pandas==1.5.3"` alone resolves
+numpy 2.x and the 1.5.3 wheel was built against numpy 1.x headers:
+`ValueError: numpy.dtype size changed`. Wants a CI job pinning both, and a README line
+saying old pandas needs `numpy<2`.
 
 **Bug — the leakage check misses one-sided exclusion (P1, carried).**
 A feature that perfectly *excludes* a class scores 0.47 NMI and escapes every
@@ -194,8 +197,8 @@ covers the list mlclean is actually measured against). What changed and what it 
 1. Land the stack and cut 0.3.0 — six fixes plus two refactors is a release, and the
    version policy says a batch is exactly when to bump.
 2. The column-label fixes and the selector aliases (today's 2 and 3, if they slip).
-3. A pinned `pandas==1.5.*` CI job, or raise the declared floor to the oldest version
-   actually tested.
+3. A pinned `pandas==1.5.3` + `numpy==1.26.4` CI job, so the floor stays proven rather
+   than proven once by hand.
 4. One-sided leakage measure as its own check, with the Criteo case as its test.
 5. Make the header's missing-cell count include disguised blanks once #11 is in, so the
    summary line and the findings agree.
@@ -239,6 +242,7 @@ covers the list mlclean is actually measured against). What changed and what it 
 | Dependabot alerts | 0 | 0 | |
 | README examples run | 5 of 5 | not measured | verified on the real Telco file |
 | Audit, 1M × 8 rows | 5.9s | not measured | first baseline |
+| Suite on declared floor | 60 pass | never run | pandas 1.5.3 + numpy 1.26.4, py3.11 |
 | Peak RSS vs frame | 2.5× | not measured | 483MB on a 194MB frame |
 
 ## Decision needed from owner
@@ -253,5 +257,6 @@ covers the list mlclean is actually measured against). What changed and what it 
 3. **Should `check_error` raise the report's severity?** Today a check that cannot run is
    invisible in the summary. Recommended: yes, surface it at medium — a report built
    from five of twelve checks should not look like a clean bill of health.
-4. **Which of today's three tasks should I implement?** Recommended: the column-label
-   bugs, as one PR stacked on #7 (where `identifiers.py` lives after the split).
+4. **Which of today's three tasks should I implement?** Decided: the column-label bugs,
+   shipped as #19 (stacked on #7). It also adds a `duplicate_column_names` check and
+   makes `audit()` refuse a duplicated target instead of failing on `AttributeError`.
