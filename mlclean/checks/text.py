@@ -10,8 +10,8 @@ from mlclean.issues import LOW, DataIssue
 
 def check_text_hygiene(df: pd.DataFrame, ctx) -> list[DataIssue]:
     issues: list[DataIssue] = []
-    for column in ctx.feature_columns(df):
-        series = df[column].dropna()
+    for column, values in ctx.feature_series(df):
+        series = values.dropna()
         if series.empty or not is_textual(series):
             continue
         values = series[series.map(lambda v: isinstance(v, str))]

@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- Column labels that are not strings no longer break the `id_column` check.
+  `pd.read_csv(path, header=None)` and `pd.DataFrame(ndarray)` give integer
+  labels, and the name heuristic called `.lower()` on them, which took the
+  whole check down as a `check_error`.
+- Frames with duplicate column labels are audited properly. Checks now read
+  each column by position, because `df[label]` returns a DataFrame when two
+  columns share a name — that was failing seven of the twelve checks, and the
+  audit still completed, so a report built from the five survivors looked
+  like a clean result. Both copies of a duplicated label are now checked
+  independently.
+- New check `duplicate_column_names` (selector `labels`): repeated labels are
+  a data-quality problem in their own right, and the finding lists the
+  positions so the copies can be told apart.
+- `audit()` refuses a duplicated target column with a clear message instead of
+  failing on `AttributeError` outside the crash guard. Which copy is the label
+  is not something it should guess.
+
 - Internal restructure: `checks/types.py` is split into one module per
   concern — `constant`, `identifiers`, `dtypes`, `text`, `cardinality` —
   with the shared `is_textual` helper in `checks/_common.py`. No behavior

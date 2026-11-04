@@ -33,8 +33,8 @@ def check_disguised_missing(df: pd.DataFrame, ctx) -> list[DataIssue]:
     if n_rows < 50:
         return issues
 
-    for column in ctx.feature_columns(df):
-        series = df[column].dropna()
+    for column, values in ctx.feature_series(df):
+        series = values.dropna()
         if series.empty:
             continue
 

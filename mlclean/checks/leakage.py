@@ -54,10 +54,9 @@ def check_target_leakage(df: pd.DataFrame, ctx) -> list[DataIssue]:
         pd.api.types.is_bool_dtype(target)
     )
 
-    for column in ctx.feature_columns(df):
+    for column, series in ctx.feature_series(df):
         if column in ctx.id_columns:
             continue
-        series = df[column]
         pair = pd.concat([series, target], axis=1).dropna()
         if len(pair) < 50:
             continue

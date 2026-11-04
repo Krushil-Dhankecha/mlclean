@@ -11,8 +11,8 @@ from mlclean.issues import LOW, MEDIUM, DataIssue
 
 def check_mixed_types(df: pd.DataFrame, ctx) -> list[DataIssue]:
     issues: list[DataIssue] = []
-    for column in ctx.feature_columns(df):
-        series = df[column].dropna()
+    for column, values in ctx.feature_series(df):
+        series = values.dropna()
         if series.empty or not is_textual(series):
             continue
         kinds = {type(v).__name__ for v in series.head(1000)}
