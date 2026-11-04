@@ -48,8 +48,13 @@ class CleaningPipeline:
 
     @classmethod
     def from_json(cls, source: str | Path) -> CleaningPipeline:
-        path = Path(source)
-        text = path.read_text(encoding="utf-8") if path.exists() else str(source)
+        """Load from a path, or from the JSON text ``to_json`` returned."""
+        text = str(source)
+        # a serialized pipeline opens with '{'; a path never does. Probing the
+        # filesystem instead raises OSError once the JSON is longer than a
+        # filename is allowed to be.
+        if not text.lstrip().startswith("{"):
+            text = Path(source).read_text(encoding="utf-8")
         data = json.loads(text)
         steps = [
             CleaningStep(

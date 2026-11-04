@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- `clean()` now acts on `numeric_stored_as_text` instead of only reporting it.
+  A column where every value parses is converted in the `safe` tier (dtype
+  only); one where a few values don't is converted in `balanced` and above,
+  where the resulting gaps can be imputed with the fit-time median and a
+  missing indicator. Telco's `TotalCharges` came out of `clean()` as a
+  6,531-category string before this.
+- `CleaningPipeline.from_json` accepts the JSON text `to_json` returns. It
+  probed the filesystem first, so any pipeline long enough to exceed the
+  filename limit raised `OSError` instead of loading.
 - Internal restructure: `report.py` is now the `mlclean.report` package
   (one module per output format) and `cleaning.py` the `mlclean.cleaning`
   package (`pipeline`, `steps`, `strategies`). No behavior change; all
