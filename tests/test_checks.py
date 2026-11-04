@@ -71,6 +71,25 @@ def test_telco_style_numeric_with_blanks():
     assert found and found[0].severity == "medium"
 
 
+def test_near_perfect_parse_rate_does_not_read_as_100_percent():
+    # 1 value in 625 fails to parse: rounding that up to "100%" invites a
+    # bare pd.to_numeric call, which raises
+    values = [str(i) for i in range(624)] + ["n/a"]
+    report = audit(pd.DataFrame({"amount": values}))
+    found = issues_for(report, "numeric_stored_as_text")[0]
+    assert "100%" not in found.message
+    assert "99.8%" in found.message
+    assert found.details["unparsed"] == 1
+    assert "1 non-numeric" in found.recommendation
+
+
+def test_fully_parseable_column_says_100_percent():
+    report = audit(pd.DataFrame({"amount": [str(i) for i in range(100)]}))
+    found = issues_for(report, "numeric_stored_as_text")[0]
+    assert "100% of values parse" in found.message
+    assert found.details["unparsed"] == 0
+
+
 def test_whitespace_and_case_issues():
     df = pd.DataFrame(
         {

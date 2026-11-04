@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- `numeric_stored_as_text` rounds its parse rate down and names how many
+  values failed to parse, so a column where 0.16% of values are blank no
+  longer reads "100% of values parse as numbers" directly above advice to
+  go and inspect the ones that don't.
+- `disguised_missing` reports blank strings however few there are. The 0.5%
+  rate floor still applies to tokens like 'unknown' or '-', which can be
+  real categories; a blank never is. Telco's 11 blank `TotalCharges` values
+  (0.16% of rows) were silently passing before.
 - Internal restructure: `checks/types.py` is split into one module per
   concern — `constant`, `identifiers`, `dtypes`, `text`, `cardinality` —
   with the shared `is_textual` helper in `checks/_common.py`. No behavior
