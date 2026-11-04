@@ -16,8 +16,8 @@ def check_missing(df: pd.DataFrame, ctx) -> list[DataIssue]:
     if n_rows == 0:
         return issues
 
-    for column in ctx.feature_columns(df):
-        n_missing = int(df[column].isna().sum())
+    for column, series in ctx.feature_series(df):
+        n_missing = int(series.isna().sum())
         if n_missing == 0:
             continue
         rate = n_missing / n_rows
@@ -78,8 +78,8 @@ def check_informative_missingness(df: pd.DataFrame, ctx) -> list[DataIssue]:
     if target.dropna().nunique() < 2:
         return issues
 
-    for column in ctx.feature_columns(df):
-        mask = df[column].isna()
+    for column, series in ctx.feature_series(df):
+        mask = series.isna()
         n_missing = int(mask.sum())
         if n_missing < 20 or n_missing > 0.95 * len(df):
             continue

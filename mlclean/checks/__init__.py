@@ -7,6 +7,7 @@ from mlclean.checks.dtypes import check_mixed_types
 from mlclean.checks.duplicates import check_duplicates
 from mlclean.checks.identifiers import check_id_columns
 from mlclean.checks.imbalance import check_class_imbalance
+from mlclean.checks.labels import check_duplicate_column_names
 from mlclean.checks.leakage import check_target_leakage
 from mlclean.checks.missing import check_informative_missingness, check_missing
 from mlclean.checks.outliers import check_outliers
@@ -19,6 +20,7 @@ CHECKS = {
     "informative_missingness": check_informative_missingness,
     "duplicates": check_duplicates,
     "constant": check_constant_columns,
+    "labels": check_duplicate_column_names,
     "ids": check_id_columns,
     "mixed_types": check_mixed_types,
     "text": check_text_hygiene,
@@ -37,6 +39,7 @@ __all__ = [
     "check_class_imbalance",
     "check_constant_columns",
     "check_disguised_missing",
+    "check_duplicate_column_names",
     "check_duplicates",
     "check_high_cardinality",
     "check_id_columns",

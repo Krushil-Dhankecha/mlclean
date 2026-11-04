@@ -89,7 +89,7 @@ inside pipelines and cross-validation. Deduplicate before splitting, with
 `audit(df).clean()`. No scikit-learn dependency — the transformer follows the
 convention, it doesn't import the library.
 
-## Checks (v0.1)
+## Checks
 
 | Check | What it catches |
 |---|---|
@@ -104,6 +104,7 @@ convention, it doesn't import the library.
 | `outliers` / `skewed_feature` | 3×IQR outliers, heavy skew |
 | `high_cardinality` | categorical columns one-hot would explode on |
 | `mixed_types` / `numeric_stored_as_text` | dtype traps |
+| `duplicate_column_names` | repeated labels, with the positions of each copy |
 | `whitespace_padding` / `case_inconsistency` | `' yes'` vs `'yes'` categories |
 
 Run a subset with `audit(df, checks=["leakage", "duplicates"])` or drop noisy

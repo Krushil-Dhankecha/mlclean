@@ -13,8 +13,7 @@ def check_outliers(df: pd.DataFrame, ctx) -> list[DataIssue]:
     if n_rows < 20:
         return issues
 
-    for column in ctx.feature_columns(df):
-        series = df[column]
+    for column, series in ctx.feature_series(df):
         if not pd.api.types.is_numeric_dtype(series) or pd.api.types.is_bool_dtype(
             series
         ):

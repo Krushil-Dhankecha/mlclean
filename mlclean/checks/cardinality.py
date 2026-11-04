@@ -13,8 +13,7 @@ def check_high_cardinality(df: pd.DataFrame, ctx) -> list[DataIssue]:
     n_rows = len(df)
     if n_rows == 0:
         return issues
-    for column in ctx.feature_columns(df):
-        series = df[column]
+    for column, series in ctx.feature_series(df):
         if not is_textual(series) and not isinstance(series.dtype, pd.CategoricalDtype):
             continue
         n_unique = int(series.nunique())

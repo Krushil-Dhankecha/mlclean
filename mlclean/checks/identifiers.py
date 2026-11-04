@@ -15,14 +15,15 @@ def check_id_columns(df: pd.DataFrame, ctx) -> list[DataIssue]:
         return issues
 
     declared = set(ctx.id_columns)
-    for column in ctx.feature_columns(df):
+    for column, values in ctx.feature_series(df):
         if column in declared:
             continue
-        series = df[column].dropna()
+        series = values.dropna()
         if series.empty:
             continue
         unique_rate = series.nunique() / len(series)
-        name = column.lower()
+        # labels are not always strings: read_csv(header=None) gives integers
+        name = str(column).lower()
         looks_like_id = name == "id" or name.endswith(("_id", "id")) or "uuid" in name
         # a continuous float measurement is naturally all-unique; only
         # integer-like or textual columns read as identifiers

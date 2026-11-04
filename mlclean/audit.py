@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Hashable, Iterator
 from dataclasses import dataclass, field
 
 import pandas as pd
@@ -26,6 +27,22 @@ class AuditContext:
         if self.target:
             skip.add(self.target)
         return [c for c in df.columns if c not in skip]
+
+    def feature_series(self, df: pd.DataFrame) -> Iterator[tuple[Hashable, pd.Series]]:
+        """Each feature column, as a label and the Series itself.
+
+        Resolved by position rather than by label: ``df[label]`` hands back a
+        DataFrame when two columns share a name, and every check that then
+        asks for ``.dtype`` dies on it. Excel exports and un-suffixed joins
+        produce duplicate labels often enough that the audit has to survive
+        them, and each duplicate gets checked rather than only the first.
+        """
+        skip = set(self.ignore_columns)
+        if self.target:
+            skip.add(self.target)
+        for position, label in enumerate(df.columns):
+            if label not in skip:
+                yield label, df.iloc[:, position]
 
 
 def _infer_task(df: pd.DataFrame, target: str | None) -> str | None:
@@ -95,6 +112,14 @@ def audit(
     """
     if target is not None and target not in df.columns:
         raise ValueError(f"target column '{target}' is not in the DataFrame")
+    if target is not None and list(df.columns).count(target) > 1:
+        # which of them is the label is not ours to guess, and every target-aware
+        # check would otherwise fail on a DataFrame where it expected a Series
+        raise ValueError(
+            f"target column '{target}' appears "
+            f"{list(df.columns).count(target)} times; rename or drop the "
+            "duplicates so the label is unambiguous"
+        )
 
     ctx = AuditContext(
         target=target,

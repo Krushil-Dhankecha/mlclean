@@ -15,8 +15,7 @@ def check_constant_columns(df: pd.DataFrame, ctx) -> list[DataIssue]:
     if n_rows == 0:
         return issues
 
-    for column in ctx.feature_columns(df):
-        series = df[column]
+    for column, series in ctx.feature_series(df):
         n_unique = series.nunique(dropna=False)
         if n_unique <= 1:
             issues.append(
