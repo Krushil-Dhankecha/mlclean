@@ -115,8 +115,10 @@ the audit — it comes back as a `check_error` finding and the rest still run.
 Never silently destructive — every change is a recorded step with a reason.
 
 - `audit_only` — report, change nothing (default mindset)
-- `safe` — strip whitespace, drop exact duplicates and constant columns, drop unlabeled rows
-- `balanced` — safe + drop id/leaky columns, impute moderate gaps (with missing indicators)
+- `safe` — strip whitespace, drop exact duplicates and constant columns, drop unlabeled
+  rows, convert numbers-stored-as-text where every value parses
+- `balanced` — safe + drop id/leaky columns, convert numbers-stored-as-text whose odd
+  values become NaN, impute moderate gaps (with missing indicators)
 - `aggressive` — balanced + drop very-high-missing and quasi-constant columns
 
 ## CLI

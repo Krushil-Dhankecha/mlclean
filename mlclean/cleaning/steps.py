@@ -53,6 +53,17 @@ def _apply_impute(df: pd.DataFrame, step: CleaningStep) -> pd.DataFrame:
     return out
 
 
+def _apply_to_numeric(df: pd.DataFrame, step: CleaningStep) -> pd.DataFrame:
+    out = df.copy()
+    for column in step.columns:
+        if column in out.columns:
+            # coerce, not raise: values that don't parse are the blanks and
+            # placeholders the check reported, and they belong in NaN where
+            # missing-value handling can see them
+            out[column] = pd.to_numeric(out[column], errors="coerce")
+    return out
+
+
 def _apply_drop_unlabeled_rows(df: pd.DataFrame, step: CleaningStep) -> pd.DataFrame:
     target = step.params["target"]
     if target not in df.columns:
@@ -65,5 +76,6 @@ APPLIERS = {
     "remove_duplicates": _apply_remove_duplicates,
     "strip_whitespace": _apply_strip_whitespace,
     "impute": _apply_impute,
+    "to_numeric": _apply_to_numeric,
     "drop_unlabeled_rows": _apply_drop_unlabeled_rows,
 }

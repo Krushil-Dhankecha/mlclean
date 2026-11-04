@@ -14,6 +14,12 @@ def _mode(series: pd.Series):
     return modes.iloc[0] if not modes.empty else None
 
 
+def _as_numeric(series: pd.Series) -> pd.Series:
+    if pd.api.types.is_numeric_dtype(series):
+        return series
+    return pd.to_numeric(series, errors="coerce")
+
+
 def _json_scalar(value):
     """numpy scalars don't survive json.dumps; plain Python ones do."""
     return value.item() if hasattr(value, "item") else value
@@ -56,6 +62,18 @@ def build_pipeline(report, strategy: str) -> CleaningPipeline:
             )
         )
 
+    text_numeric = {
+        column: float(issue.details.get("parse_rate", 0.0))
+        for issue in issues_by_check.get("numeric_stored_as_text", [])
+        for column in issue.columns
+    }
+    # every value parses, so converting changes the dtype and nothing else
+    exact = sorted(c for c, rate in text_numeric.items() if rate >= 1.0)
+    if exact:
+        pipeline.steps.append(
+            CleaningStep("to_numeric", "numeric_stored_as_text", columns=exact)
+        )
+
     if strategy == "safe":
         return pipeline
 
@@ -73,16 +91,43 @@ def build_pipeline(report, strategy: str) -> CleaningPipeline:
         pipeline.steps.append(
             CleaningStep("drop_columns", "possible_target_leakage", columns=leaky)
         )
+    dropped = set(constant) | set(id_cols) | set(leaky)
+    # a few values don't parse — blanks, placeholders — and become NaN, so this
+    # waits for the tier that is allowed to impute
+    coerced = sorted(
+        c
+        for c, rate in text_numeric.items()
+        if rate < 1.0 and c not in dropped and c in report.df.columns
+    )
+    if coerced:
+        pipeline.steps.append(
+            CleaningStep(
+                "to_numeric",
+                "numeric_stored_as_text",
+                columns=coerced,
+                params={"coerced_to_nan": True},
+            )
+        )
+
     numeric_gaps, categorical_gaps = [], []
     for issue in issues_by_check.get("missing_values", []):
         for column in issue.columns:
             rate = issue.details.get("rate", 0)
             if strategy == "balanced" and rate >= report.context.missing_threshold:
                 continue  # left for aggressive
-            if pd.api.types.is_numeric_dtype(report.df[column]):
+            # a column converted above is numeric by the time impute runs
+            if column in text_numeric or pd.api.types.is_numeric_dtype(
+                report.df[column]
+            ):
                 numeric_gaps.append(column)
             else:
                 categorical_gaps.append(column)
+    # gaps the conversion above just made visible
+    numeric_gaps += [
+        c
+        for c in coerced
+        if c not in numeric_gaps and _as_numeric(report.df[c]).isna().any()
+    ]
     if numeric_gaps:
         pipeline.steps.append(
             CleaningStep(
@@ -93,7 +138,8 @@ def build_pipeline(report, strategy: str) -> CleaningPipeline:
                     "method": "median",
                     "indicator": True,
                     "values": {
-                        c: _json_scalar(report.df[c].median()) for c in numeric_gaps
+                        c: _json_scalar(_as_numeric(report.df[c]).median())
+                        for c in numeric_gaps
                     },
                 },
             )

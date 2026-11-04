@@ -66,6 +66,56 @@ def test_pipeline_round_trips_through_json(tmp_path):
     pd.testing.assert_frame_equal(replayed, clean_df)
 
 
+def telco_shaped_df():
+    # TotalCharges as pandas reads it: money kept as text, a handful of the
+    # values blank rather than NaN
+    n = 200
+    charges = [f"{20.5 * (i + 1):.2f}" for i in range(n - 4)] + [" "] * 4
+    return pd.DataFrame(
+        {
+            "total_charges": charges,
+            "tenure": list(range(n)),
+            "churn": [i % 2 for i in range(n)],
+        }
+    )
+
+
+def test_balanced_clean_converts_numeric_text_and_fills_the_blanks():
+    df = telco_shaped_df()
+    report = audit(df, target="churn")
+    clean_df, pipeline = report.clean(strategy="balanced")
+
+    assert pd.api.types.is_numeric_dtype(clean_df["total_charges"])
+    assert not clean_df["total_charges"].isna().any()
+    # the 4 blanks became NaN, were flagged, then filled with the fit median
+    assert clean_df["total_charges_missing"].sum() == 4
+    impute = next(s for s in pipeline.steps if s.step == "impute")
+    assert impute.params["values"]["total_charges"] == df["total_charges"][
+        : len(df) - 4
+    ].astype(float).median()
+    # conversion is recorded, and runs before the fill
+    names = [s.step for s in pipeline.steps]
+    assert names.index("to_numeric") < names.index("impute")
+
+
+def test_safe_clean_converts_only_fully_parseable_text():
+    lossless = pd.DataFrame({"amount": [str(i) for i in range(100)]})
+    _, pipeline = audit(lossless).clean(strategy="safe")
+    assert [s.step for s in pipeline.steps] == ["to_numeric"]
+
+    # with values that don't parse, conversion would introduce NaN, so safe
+    # leaves the column alone
+    _, pipeline = audit(telco_shaped_df(), target="churn").clean(strategy="safe")
+    assert "to_numeric" not in {s.step for s in pipeline.steps}
+
+
+def test_pipeline_loads_from_json_text():
+    df = telco_shaped_df()
+    clean_df, pipeline = audit(df, target="churn").clean(strategy="balanced")
+    replayed = CleaningPipeline.from_json(pipeline.to_json()).apply(df)
+    pd.testing.assert_frame_equal(replayed, clean_df)
+
+
 def test_audit_only_changes_nothing():
     df = make_df()
     report = audit(df, target="churn")
