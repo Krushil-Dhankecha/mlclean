@@ -2,8 +2,14 @@
 
 ## Executive summary
 
-- Nothing has merged since 0.2.0 on 2026-11-02. Eight code PRs, all 14/14 green, now
-  eight days old. `main` is still `b48eb32`.
+- **CI cannot go green, so nothing in the repo is mergeable.** `ubuntu-latest` has rolled
+  to Ubuntu 26.04, for which `actions/setup-python` has no Python 3.9 build, and
+  `test (ubuntu-latest, 3.9)` is a required status check on `main`. Found on this run's
+  own docs-only PR (#30), which rules the code out. Filed as #31 (P0) — it is now the one
+  thing blocking every other fix in the repo.
+- Nothing has merged since 0.2.0 on 2026-11-02. Eight code PRs, now eight days old.
+  `main` is still `b48eb32`. The "all 14/14 green" they display is from check runs dated
+  2026-11-03/04, before the image rolled; a re-run fails the same way #30 did.
 - New bug, found by dogfooding `MLCleaner.fit`: it pairs `y` to `X` **by position** and
   throws away `y`'s index. With a `y` holding the same labels on the same index in a
   different order, 218 of 600 rows were mispaired, the leakage check stopped firing, and
@@ -43,7 +49,9 @@
 - Lint: `ruff check .` — all checks passed.
 - Coverage: 93%. `cleaning.py` at 82% is still the weakest module; `transformer.py` reads
   98% and the two contract bugs in it are both uncovered behaviour, not uncovered lines.
-- CI: all ten open PRs are 14/14 green (py3.9–3.13 Linux, plus macOS and Windows on 3.13).
+- CI: **broken on `main` and every branch.** `test (ubuntu-latest, 3.9)` fails inside
+  `setup-python` because Ubuntu 26.04 has no 3.9 build; the other twelve jobs pass. The
+  stack's green badges are stale runs from 2026-11-03/04. See #31.
 - Open PRs: 10. Merge order unchanged:
   - `#9` (product audit + roadmap) → `#10` (leakage by mutual information)
   - `#6` (split report/ and cleaning/ into packages) → `#12` (`clean()` converts
@@ -54,7 +62,7 @@
   - `#8` (memory footprint check) last, since it also touches `checks/__init__.py`
   - `#13`, `#20`, `#26` are the 11-04, 11-05 and 11-06 daily reports, all off `main` and
     independent of the code stack
-- Open issues: 13 after today's filings — #14–#18, #21–#25, #27–#29. #14 and #15 are
+- Open issues: 14 after today's filings — #14–#18, #21–#25, #27–#29, #31. #14 and #15 are
   closed by #19 and could be closed the moment it merges. Nothing is stale or missing a
   reproduction.
 - Dependencies: 0 dependabot alerts, no open bump PRs. Still pandas + numpy only.
@@ -62,6 +70,17 @@
   in `main`, which is the problem — all fifteen known bugs ride with it.
 
 ## New issues found
+
+**Bug — CI cannot pass, so no PR is mergeable** (#31, P0, no fix on any branch).
+`ubuntu-latest` is now Ubuntu 26.04 and `actions/setup-python` has no 3.9 build for it:
+"The version '3.9' with architecture 'x64' was not found for Ubuntu 26.04." Confirmed
+against the upstream manifest — 3.9 ships linux builds for 20.04/22.04/24.04 only, while
+3.10 and later include 26.04, which is why exactly one job fails. Branch protection
+requires `test (ubuntu-latest, 3.9)` and `test (ubuntu-latest, 3.13)`, so the gate is now
+permanently red. Found on this run's own docs-only PR (#30), which is what rules the code
+out as a cause. `.github/workflows/ci.yml` is touched by no open PR, so the fix branches
+off `main` freely — but renaming the required status context is a GitHub-side change only
+Krushil can make, and the code half is useless without it.
 
 **Bug — `MLCleaner.fit(X, y)` pairs `y` positionally and discards its index** (#27, P1,
 no fix on any branch). `transformer.py:71` is `frame[name] = np.asarray(y)`. Measured on a
@@ -149,23 +168,26 @@ still due 2026-11-11.
 
 ## Recommended work for today
 
-1. **Fix #21 and #27 together in one PR off `main`.** First step: add
+1. **Fix #31.** Nothing else can land until it does, and it displaced the day's planned
+   task. First step: move the 3.9 entry out of the `ubuntu-latest` list into an `include:`
+   on `ubuntu-24.04`, which the manifest confirms has 3.9. Then Krushil renames the
+   required status context on `main` to match the new job name. Needs a call on (a) keep
+   3.9 on a pinned runner or (b) drop 3.9, which is EOL — recommend (a) today.
+2. **Fix #21 and #27 together in one PR off `main`.** First step: add
    `feature_names_in_`/`n_features_in_` and an output-column list recorded at fit, then
    index-align `y` in `fit` before the audit. `transformer.py` and
    `tests/test_transformer.py` are touched by no open PR, so this merges in any order.
-   Needs approval before any code is written.
-2. **File nothing further; merge something.** The three issues from today are filed. The
-   highest-value action left today is Krushil merging #9 → #10 and #6 → #12, which clears
-   four of the eight and frees `CHANGELOG.md` and `cleaning/strategies.py`.
-3. **Add the pinned floor CI job from #17** if there is time after 1. First step:
-   `pip install "pandas==1.5.3" "numpy==1.26.4"` as its own matrix entry in `ci.yml`,
-   which no open PR touches. Settled on 2026-11-04 that the suite passes at that floor, so
-   this is a job definition, not an investigation.
+   Needs approval before any code is written. This was the day's recommendation before
+   #31 appeared, and it is still the right second task.
+3. **Then merge something.** Once #31 is in, #9 → #10 and #6 → #12 clear four of the
+   eight and free `CHANGELOG.md` and `cleaning/strategies.py`, which two filed issues are
+   blocked behind. If the runner question is being opened anyway, add #17's pinned floor
+   job (`pandas==1.5.3` with `numpy==1.26.4`) to the same `ci.yml` change.
 
 ## Recommended work for this week
 
-1. **Merge the stack in the order above.** Unblocks everything else; every day it waits,
-   new fixes get harder to branch.
+1. **#31, then merge the stack in the order above.** Unblocks everything else; every day
+   it waits, new fixes get harder to branch.
 2. **#21 + #27.** Unblocks the visibility wave, which is being held on exactly this.
 3. **#23's skipped-check count.** Unblocks `report.fail_if` (roadmap P2).
 4. **#17's floor job plus one README line** saying pandas 1.5–1.x needs `numpy<2`.
@@ -176,10 +198,15 @@ still due 2026-11-11.
 
 ## Risks
 
-- **Inaction is the main risk and it is compounding.** Eight days unmerged. Fourteen of
-  fifteen known bugs are fixed in branches and live on PyPI, and the CLI demo on the real
-  Telco file still prints two of them. 4 installs yesterday means the first real reader
-  may already have arrived.
+- **The merge queue is now hard-blocked, not just unattended.** Until #31 lands, no PR
+  can satisfy branch protection. Eight days unmerged was a choice; from today it is a
+  wall. Fourteen of fifteen known bugs are fixed in branches and live on PyPI, the CLI
+  demo on the real Telco file still prints two of them, and 4 installs yesterday means
+  the first real reader may already have arrived.
+- **Pinned compatibility claims age out silently.** #31 is the second claim this repo has
+  made and left unwatched; #17 is the first. Both failed at the oldest-supported end, and
+  nothing was watching either. Worth deciding whether 3.9 is a promise the project wants
+  to keep at all.
 - **Branch-off points are running out.** `CHANGELOG.md` is contended by seven PRs,
   `README.md` by four, `checks/__init__.py` by three, `report.py` by #6, `cleaning.py` by
   #6 then #12. Only `transformer.py` and `.github/workflows/ci.yml` are free. Today's
@@ -202,8 +229,8 @@ still due 2026-11-11.
 | Stars | 0 | 0 | Discussions still off, no inbound channel |
 | Forks | 0 | 0 | |
 | Watchers | 0 | 0 | |
-| Open issues | 13 | 10 | #14–#18, #21–#25, #27–#29; three filed today |
-| Open PRs | 10 | 10 | all 14/14 green, nothing merged since 2026-11-02 |
+| Open issues | 14 | 10 | #14–#18, #21–#25, #27–#29, #31; four filed today |
+| Open PRs | 11 | 10 | 12/14 today — the 3.9 job now fails on every one (#31) |
 | Tests | 51 pass, 0.81s | 51 pass, 0.87s | 60 on the #19 branch |
 | Coverage | 93% | 93% | `cleaning.py` 82% still the weakest module |
 | Dependabot alerts | 0 | 0 | |
@@ -217,23 +244,29 @@ still due 2026-11-11.
 
 ## Decision needed from owner
 
-1. **Merge the stack?** Ten PRs, all green, nothing merged in eight days. Claude cannot
-   merge — the auto-mode classifier blocks `gh pr merge` as "Merge Without Review".
-   Options: merge in the order above yourself; grant the permission; or say what the stack
-   is waiting on, so the next run stops leading with it. **Recommend merging #9 → #10 and
-   #6 → #12 today.** That clears four of the eight and frees `CHANGELOG.md` and
-   `cleaning/strategies.py`, which two filed issues are currently blocked behind.
-2. **Which task should Claude implement today?** One task, with approval.
-   **Recommend #21 + #27 in a single PR off `main`** — same file, same broken promise at
-   both ends, no stack contention, and the visibility wave is already being held on #21.
-   The alternative is #23, which is broader but less severe.
-3. **#27: should a mispaired `y` raise, or realign?** Options: (a) if `y` is a Series or
+1. **#31: keep Python 3.9 or drop it?** Options: (a) pin the 3.9 job to `ubuntu-24.04`
+   and keep `requires-python = ">=3.9"` — smallest diff, keeps the promise, and you rename
+   the required status context on `main` to `test (ubuntu-24.04, 3.9)`; (b) drop 3.9 —
+   bump to `>=3.10`, drop the classifier and the required context, since 3.9 went EOL in
+   October 2025. **Recommend (a) today**, because unblocking the merge queue should not be
+   bundled with a support-policy change, and (b) as its own decision later.
+2. **Merge the stack once #31 is in?** Eleven PRs, nothing merged in eight days, and the
+   gate is red for all of them. Claude cannot merge — the auto-mode classifier blocks
+   `gh pr merge` as "Merge Without Review". Options: merge in the order above yourself;
+   grant the permission; or say what the stack is waiting on, so the next run stops
+   leading with it. **Recommend #9 → #10 and #6 → #12 first**, which clears four of the
+   eight and frees `CHANGELOG.md` and `cleaning/strategies.py`.
+3. **Which task should Claude implement today?** One task, with approval. **#31 first**,
+   since nothing lands without it. If you would rather Claude not touch CI, the fallback
+   is **#21 + #27 in a single PR off `main`** — same file, same broken promise at both
+   ends, no stack contention, and the visibility wave is already held on #21.
+4. **#27: should a mispaired `y` raise, or realign?** Options: (a) if `y` is a Series or
    DataFrame, align on the index and raise `ValueError` when the index sets differ, falling
    back to positional only for arrays and lists; (b) warn and keep positional; (c) document
    positional as the contract and change nothing. **Recommend (a)** — it matches what
    pandas would have done with a plain assignment, and (c) leaves a silent wrong answer in
    the one component meant for production.
-4. **Hold the visibility wave?** Unchanged recommendation: **hold until #21, #27 and #23
+5. **Hold the visibility wave?** Unchanged recommendation: **hold until #21, #27 and #23
    land.** The reason is now stronger, not weaker — #27 is a second silent wrong answer in
    the same component, and yesterday's 4 installs suggest the window for fixing it quietly
    is closing.
