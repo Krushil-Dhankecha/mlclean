@@ -52,7 +52,7 @@
 - CI: **broken on `main` and every branch.** `test (ubuntu-latest, 3.9)` fails inside
   `setup-python` because Ubuntu 26.04 has no 3.9 build; the other twelve jobs pass. The
   stack's green badges are stale runs from 2026-11-03/04. See #31.
-- Open PRs: 10. Merge order unchanged:
+- Open PRs: 12 (eight code PRs, four daily reports). Merge order unchanged:
   - `#9` (product audit + roadmap) → `#10` (leakage by mutual information)
   - `#6` (split report/ and cleaning/ into packages) → `#12` (`clean()` converts
     numeric-stored-as-text, `from_json` fix)
@@ -230,7 +230,7 @@ still due 2026-11-11.
 | Forks | 0 | 0 | |
 | Watchers | 0 | 0 | |
 | Open issues | 14 | 10 | #14–#18, #21–#25, #27–#29, #31; four filed today |
-| Open PRs | 11 | 10 | 12/14 today — the 3.9 job now fails on every one (#31) |
+| Open PRs | 12 | 11 | 12/14 checks today — the 3.9 job now fails on every one (#31) |
 | Tests | 51 pass, 0.81s | 51 pass, 0.87s | 60 on the #19 branch |
 | Coverage | 93% | 93% | `cleaning.py` 82% still the weakest module |
 | Dependabot alerts | 0 | 0 | |
@@ -250,7 +250,7 @@ still due 2026-11-11.
    bump to `>=3.10`, drop the classifier and the required context, since 3.9 went EOL in
    October 2025. **Recommend (a) today**, because unblocking the merge queue should not be
    bundled with a support-policy change, and (b) as its own decision later.
-2. **Merge the stack once #31 is in?** Eleven PRs, nothing merged in eight days, and the
+2. **Merge the stack once #31 is in?** Twelve PRs, nothing merged in eight days, and the
    gate is red for all of them. Claude cannot merge — the auto-mode classifier blocks
    `gh pr merge` as "Merge Without Review". Options: merge in the order above yourself;
    grant the permission; or say what the stack is waiting on, so the next run stops
