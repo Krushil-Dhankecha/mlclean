@@ -86,8 +86,25 @@ X_test_clean = cleaner.transform(X_test)   # same drops, train's medians
 
 `transform` never changes the number of rows, so X stays aligned with y
 inside pipelines and cross-validation. Deduplicate before splitting, with
-`audit(df).clean()`. No scikit-learn dependency — the transformer follows the
-convention, it doesn't import the library.
+`audit(df).clean()`.
+
+It does not change the columns either. `transform` returns exactly the columns
+`fit` produced, in that order, however the incoming frame happens to be
+ordered — a serving payload built from a dict or a JSON body carries no
+reliable column order, and a frame whose columns are in a different order from
+the training frame is the usual way train/serve skew gets in. A feature the
+pipeline needs and the frame does not carry raises `ValueError` rather than
+being imputed from nothing; a column training never saw is dropped and listed
+in `cleaner.unknown_columns_`. `feature_names_in_` and `n_features_in_`
+describe what `fit` was given, `feature_names_out_` and
+`get_feature_names_out()` what `transform` returns.
+
+`y` is matched to `X` on its index, not by position, so a `y` sorted
+differently from `X` labels the right rows instead of silently mislabelling
+them; pass `y` as an array to pair positionally on purpose.
+
+No scikit-learn dependency — the transformer follows the convention, it
+doesn't import the library.
 
 ## Checks (v0.1)
 
