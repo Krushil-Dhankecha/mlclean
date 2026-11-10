@@ -168,26 +168,33 @@ still due 2026-11-11.
 
 ## Recommended work for today
 
-1. **Fix #31.** Nothing else can land until it does, and it displaced the day's planned
-   task. First step: move the 3.9 entry out of the `ubuntu-latest` list into an `include:`
-   on `ubuntu-24.04`, which the manifest confirms has 3.9. Then Krushil renames the
-   required status context on `main` to match the new job name. Needs a call on (a) keep
-   3.9 on a pinned runner or (b) drop 3.9, which is EOL — recommend (a) today.
+1. ~~**Fix #31.**~~ **Done this run.** Option (a) approved, so `requires-python` and the
+   3.9 classifier are unchanged. **PR #32** moves 3.9 into an `include:` on `ubuntu-24.04`
+   and leaves the other jobs on `ubuntu-latest` on purpose, so the next image roll still
+   shows up instead of being papered over. 14/14 green, `test (ubuntu-24.04, 3.9)` passing
+   in 24–28s. The required contexts on `main` were then updated to
+   `test (ubuntu-24.04, 3.9)` + `test (ubuntu-latest, 3.13)` — also approved, also done,
+   `strict: false` preserved. **All that is left is merging #32**, which Claude cannot do.
 2. **Fix #21 and #27 together in one PR off `main`.** First step: add
    `feature_names_in_`/`n_features_in_` and an output-column list recorded at fit, then
    index-align `y` in `fit` before the audit. `transformer.py` and
    `tests/test_transformer.py` are touched by no open PR, so this merges in any order.
    Needs approval before any code is written. This was the day's recommendation before
    #31 appeared, and it is still the right second task.
-3. **Then merge something.** Once #31 is in, #9 → #10 and #6 → #12 clear four of the
-   eight and free `CHANGELOG.md` and `cleaning/strategies.py`, which two filed issues are
-   blocked behind. If the runner question is being opened anyway, add #17's pinned floor
-   job (`pandas==1.5.3` with `numpy==1.26.4`) to the same `ci.yml` change.
+3. **Then merge something — but the order changed.** #32 is `CLEAN`; every other PR now
+   reads `BLOCKED`, because they still carry the old `ci.yml` and so the newly required
+   `test (ubuntu-24.04, 3.9)` never reports on their heads. `strict: false` does not help:
+   the missing context comes from the branch's own workflow file. **So merge #32 first,
+   then merge `main` into each other PR (or rebase it) to pick up the new workflow**, and
+   only then does #9 → #10 and #6 → #12 apply — those clear four of the eight and free
+   `CHANGELOG.md` and `cleaning/strategies.py`, which two filed issues sit behind. #17's
+   pinned floor job (`pandas==1.5.3` with `numpy==1.26.4`) is a natural follow-on to #32,
+   now that `ci.yml` is already open.
 
 ## Recommended work for this week
 
-1. **#31, then merge the stack in the order above.** Unblocks everything else; every day
-   it waits, new fixes get harder to branch.
+1. **Merge #32, rebase the rest, then merge the stack in the order above.** Unblocks
+   everything else; every day it waits, new fixes get harder to branch.
 2. **#21 + #27.** Unblocks the visibility wave, which is being held on exactly this.
 3. **#23's skipped-check count.** Unblocks `report.fail_if` (roadmap P2).
 4. **#17's floor job plus one README line** saying pandas 1.5–1.x needs `numpy<2`.
@@ -230,7 +237,7 @@ still due 2026-11-11.
 | Forks | 0 | 0 | |
 | Watchers | 0 | 0 | |
 | Open issues | 14 | 10 | #14–#18, #21–#25, #27–#29, #31; four filed today |
-| Open PRs | 12 | 11 | 12/14 checks today — the 3.9 job now fails on every one (#31) |
+| Open PRs | 13 | 11 | #32 added and 14/14 green; the other twelve need a rebase onto the new `ci.yml` |
 | Tests | 51 pass, 0.81s | 51 pass, 0.87s | 60 on the #19 branch |
 | Coverage | 93% | 93% | `cleaning.py` 82% still the weakest module |
 | Dependabot alerts | 0 | 0 | |
@@ -244,14 +251,15 @@ still due 2026-11-11.
 
 ## Decision needed from owner
 
-1. **#31: keep Python 3.9 or drop it?** Options: (a) pin the 3.9 job to `ubuntu-24.04`
-   and keep `requires-python = ">=3.9"` — smallest diff, keeps the promise, and you rename
-   the required status context on `main` to `test (ubuntu-24.04, 3.9)`; (b) drop 3.9 —
-   bump to `>=3.10`, drop the classifier and the required context, since 3.9 went EOL in
-   October 2025. **Recommend (a) today**, because unblocking the merge queue should not be
-   bundled with a support-policy change, and (b) as its own decision later.
-2. **Merge the stack once #31 is in?** Twelve PRs, nothing merged in eight days, and the
-   gate is red for all of them. Claude cannot merge — the auto-mode classifier blocks
+1. ~~**#31: keep Python 3.9 or drop it?**~~ **Answered: (a), pin.** Implemented in PR #32
+   and the required-check list on `main` updated to match. Option (b) — drop 3.9, bump
+   `requires-python` to `>=3.10`, drop the classifier — is still open as its own
+   support-policy decision, deliberately not bundled with unblocking the queue. 3.9 has
+   been EOL since October 2025, and `ubuntu-24.04` is the last image carrying it, so this
+   pin has a shelf life; worth deciding before that image goes too.
+2. **Merge the stack now that the gate is open?** Thirteen PRs, nothing merged in eight
+   days. The gate is no longer red — #32 is `MERGEABLE`/`CLEAN` — but #32 has to go first
+   and the others need `main` merged in afterwards before their own gates clear. Claude cannot merge — the auto-mode classifier blocks
    `gh pr merge` as "Merge Without Review". Options: merge in the order above yourself;
    grant the permission; or say what the stack is waiting on, so the next run stops
    leading with it. **Recommend #9 → #10 and #6 → #12 first**, which clears four of the
