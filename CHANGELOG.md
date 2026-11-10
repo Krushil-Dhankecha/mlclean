@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+- `MLCleaner.transform` now returns the columns `fit` produced, in that order,
+  whatever order the incoming frame is in. It raises `ValueError` when a column
+  the pipeline needs is absent instead of dropping it and its indicator in
+  silence, and drops columns training never saw, listing them in
+  `unknown_columns_`. Previously the output column list was whatever the caller
+  passed, so a serving frame assembled from a dict or JSON — where column order
+  is arbitrary — could be scored in the wrong order with no error raised.
+- `MLCleaner` records `feature_names_in_`, `n_features_in_`,
+  `feature_names_out_` and `get_feature_names_out()` after fit.
+- `MLCleaner.fit` matches a pandas `y` to `X` on the index rather than by
+  position. A `y` holding the same labels in a different order previously
+  mislabelled rows without raising, which made the leakage and missingness
+  checks report on the wrong pairings. A `y` whose index does not cover `X`
+  now raises `ValueError`; array and list targets still pair by position.
+
 ## 0.2.0 — 2026-11-02
 
 - New check `disguised_missing`: sentinel values standing in for nulls —
