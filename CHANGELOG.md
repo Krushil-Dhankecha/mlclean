@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- `clean()` keeps the index of the rows that survive, instead of renumbering
+  from zero. Removing duplicates or dropping unlabeled rows used to discard
+  the row labels, so a `y`, a weight column or the id column the audit told
+  you to exclude could no longer be matched to the cleaned frame —
+  `y.loc[clean_df.index]` silently returned the wrong rows. Call
+  `.reset_index(drop=True)` yourself if you want contiguous numbering.
+  `MLCleaner.transform` is unaffected; it never ran row steps.
 - `clean()` now acts on `numeric_stored_as_text` instead of only reporting it.
   A column where every value parses is converted in the `safe` tier (dtype
   only); one where a few values don't is converted in `balanced` and above,
