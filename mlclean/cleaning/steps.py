@@ -15,7 +15,9 @@ def _apply_drop_columns(df: pd.DataFrame, step: CleaningStep) -> pd.DataFrame:
 
 
 def _apply_remove_duplicates(df: pd.DataFrame, step: CleaningStep) -> pd.DataFrame:
-    return df.drop_duplicates(ignore_index=True)
+    # the index is kept, so the caller can still line the result up with a
+    # y, a weight or an id column held outside the frame
+    return df.drop_duplicates()
 
 
 def _apply_strip_whitespace(df: pd.DataFrame, step: CleaningStep) -> pd.DataFrame:
@@ -68,7 +70,7 @@ def _apply_drop_unlabeled_rows(df: pd.DataFrame, step: CleaningStep) -> pd.DataF
     target = step.params["target"]
     if target not in df.columns:
         return df
-    return df.dropna(subset=[target]).reset_index(drop=True)
+    return df.dropna(subset=[target])
 
 
 APPLIERS = {

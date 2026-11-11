@@ -61,6 +61,17 @@ clean_df, pipeline = report.clean(strategy="safe")
 pipeline.to_json("cleaning_steps.json")   # reproducible, auditable
 ```
 
+`clean()` can drop rows, and it keeps the index of the ones that survive. So
+anything you hold beside the frame still lines up:
+
+```python
+ids = df["customer_id"]                    # excluded from features, kept for joining back
+clean_df, _ = audit(df, target="churn").clean(strategy="balanced")
+
+ids.loc[clean_df.index]                    # the customers that survived cleaning
+y.loc[clean_df.index]                      # labels, weights, groups — same call
+```
+
 Replay the exact same cleaning anywhere:
 
 ```python
@@ -84,8 +95,8 @@ X_train_clean = cleaner.fit_transform(X_train, y_train)
 X_test_clean = cleaner.transform(X_test)   # same drops, train's medians
 ```
 
-`transform` never changes the number of rows, so X stays aligned with y
-inside pipelines and cross-validation. Deduplicate before splitting, with
+`transform` never changes the number of rows and never touches the index, so
+X stays aligned with y inside pipelines and cross-validation. Deduplicate before splitting, with
 `audit(df).clean()`. No scikit-learn dependency — the transformer follows the
 convention, it doesn't import the library.
 

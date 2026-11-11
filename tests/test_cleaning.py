@@ -123,3 +123,91 @@ def test_audit_only_changes_nothing():
 
     pd.testing.assert_frame_equal(clean_df, df)
     assert pipeline.steps == []
+
+
+def partly_labelled_df():
+    """60 rows whose target is missing for four scattered customers.
+
+    Scattered, not trailing: if every dropped row sits at the end of the
+    frame a fresh RangeIndex happens to line up with the survivors, which
+    is how index renumbering stays invisible.
+    """
+    rng = np.random.default_rng(11)
+    n = 60
+    df = pd.DataFrame(
+        {
+            # distinct ages, so no row duplicates another and this fixture
+            # exercises drop_unlabeled_rows on its own
+            "age": (rng.random(n) * 60 + 18).round(2),
+            "plan": rng.choice(["basic", "pro"], n),
+            "churn": rng.integers(0, 2, n).astype(float),
+        }
+    )
+    df.loc[[5, 17, 33, 48], "churn"] = np.nan
+    assert not df.duplicated().any()
+    return df
+
+
+def interleaved_duplicates_df():
+    """53 rows with three exact duplicates sitting next to their originals."""
+    rng = np.random.default_rng(12)
+    rows = []
+    for i in range(50):
+        rows.append(
+            {
+                "age": float(rng.integers(18, 80)),
+                "plan": "basic" if i % 2 else "pro",
+                "churn": float(i % 2),
+            }
+        )
+        if i in (7, 19, 31):
+            rows.append(dict(rows[-1]))
+    return pd.DataFrame(rows)
+
+
+def test_clean_preserves_surviving_index_when_rows_dropped():
+    df = partly_labelled_df()
+    clean_df, pipeline = audit(df, target="churn").clean(strategy="balanced")
+
+    steps = {s.step for s in pipeline.steps}
+    assert "drop_unlabeled_rows" in steps and "remove_duplicates" not in steps
+    expected = df.index[df["churn"].notna()]
+    pd.testing.assert_index_equal(clean_df.index, expected, exact=True)
+    # the renumbered index would be 0..55, which is the bug this guards
+    assert not clean_df.index.equals(pd.RangeIndex(len(clean_df)))
+
+
+def test_clean_preserves_index_when_duplicates_removed():
+    df = interleaved_duplicates_df()
+    clean_df, pipeline = audit(df, target="churn").clean(strategy="balanced")
+
+    steps = {s.step for s in pipeline.steps}
+    assert "remove_duplicates" in steps and "drop_unlabeled_rows" not in steps
+    expected = df.index[~df.duplicated()]
+    pd.testing.assert_index_equal(clean_df.index, expected, exact=True)
+    assert not clean_df.index.equals(pd.RangeIndex(len(clean_df)))
+
+
+def test_series_held_outside_the_frame_remaps_after_clean():
+    """The id column mlclean tells you to exclude is the motivating case."""
+    df = partly_labelled_df()
+    ids = pd.Series([f"C{i:04d}" for i in range(len(df))], index=df.index)
+
+    clean_df, _ = audit(df, target="churn").clean(strategy="balanced")
+
+    remapped = ids.loc[clean_df.index]
+    expected = ids[df["churn"].notna()]
+    pd.testing.assert_series_equal(remapped, expected)
+    # and a target held aside lines up with the one inside the frame
+    y = df["churn"].loc[clean_df.index]
+    np.testing.assert_array_equal(y.to_numpy(), clean_df["churn"].to_numpy())
+
+
+def test_apply_without_row_steps_keeps_every_row_and_the_index():
+    """The transformer path: no row step runs, so the caller's index stands."""
+    df = interleaved_duplicates_df()
+    _, pipeline = audit(df, target="churn").clean(strategy="balanced")
+
+    out = pipeline.apply(df, include_row_steps=False)
+    pd.testing.assert_index_equal(out.index, df.index, exact=True)
+    assert len(out) == len(df)
