@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- `high_cardinality` no longer fires on a text column whose values parse as
+  numbers. Such a column is already reported as `numeric_stored_as_text`, and
+  recommending target encoding for it contradicted that finding. Both checks now
+  read one shared parse-rate helper, so they cannot disagree about whether a
+  column holds numbers.
+
 ## 0.2.0 — 2026-11-02
 
 - New check `disguised_missing`: sentinel values standing in for nulls —

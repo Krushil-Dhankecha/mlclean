@@ -89,6 +89,39 @@ def test_high_cardinality():
     assert issues_for(report, "high_cardinality")[0].columns == ["city"]
 
 
+def test_high_cardinality_skips_numeric_stored_as_text():
+    """A text column of numbers is reported as numeric, not as a category to encode."""
+    # 200 distinct values over 300 rows, so the column is high-cardinality without
+    # being unique — the shape TotalCharges has in the Telco dataset.
+    amounts = [f"{i / 7:.2f}" for i in range(200)]
+    amounts += amounts[:100]
+    df = pd.DataFrame({"amount": amounts, "y": np.arange(300) % 2})
+    report = audit(df, target="y")
+    assert issues_for(report, "numeric_stored_as_text")[0].columns == ["amount"]
+    assert not [i for i in issues_for(report, "high_cardinality") if "amount" in i.columns]
+
+
+def test_high_cardinality_still_flags_text_categories():
+    """The skip must not swallow a genuinely categorical high-cardinality column."""
+    df = pd.DataFrame(
+        {
+            "sku": [f"sku-{i}-{i % 3}a" for i in range(150)] * 2,
+            "y": np.arange(300) % 2,
+        }
+    )
+    report = audit(df, target="y")
+    assert issues_for(report, "high_cardinality")[0].columns == ["sku"]
+    assert not issues_for(report, "numeric_stored_as_text")
+
+
+def test_high_cardinality_ignores_numeric_dtype():
+    """Unchanged behaviour: a real numeric column draws neither finding."""
+    df = pd.DataFrame({"amount": np.arange(300) / 7, "y": np.arange(300) % 2})
+    report = audit(df, target="y")
+    assert not issues_for(report, "high_cardinality")
+    assert not issues_for(report, "numeric_stored_as_text")
+
+
 def test_outliers_and_skew():
     rng = np.random.default_rng(2)
     df = pd.DataFrame(

@@ -17,6 +17,21 @@ def _is_textual(series: pd.Series) -> bool:
     )
 
 
+NUMERIC_PARSE_THRESHOLD = 0.95
+
+
+def _numeric_parse_rate(series: pd.Series) -> float:
+    """Share of non-null values that parse as numbers.
+
+    Read by both check_mixed_types, which reports a text column of numbers, and
+    check_high_cardinality, which must not then call the same column a category.
+    """
+    series = series.dropna()
+    if series.empty:
+        return 0.0
+    return float(pd.to_numeric(series, errors="coerce").notna().mean())
+
+
 def check_constant_columns(df: pd.DataFrame, ctx) -> list[DataIssue]:
     issues: list[DataIssue] = []
     n_rows = len(df)
@@ -124,9 +139,8 @@ def check_mixed_types(df: pd.DataFrame, ctx) -> list[DataIssue]:
             )
             continue
         # numbers stored as strings
-        numeric = pd.to_numeric(series, errors="coerce")
-        parse_rate = float(numeric.notna().mean())
-        if parse_rate >= 0.95 and series.nunique() > 10:
+        parse_rate = _numeric_parse_rate(series)
+        if parse_rate >= NUMERIC_PARSE_THRESHOLD and series.nunique() > 10:
                 issues.append(
                     DataIssue(
                         check="numeric_stored_as_text",
@@ -200,6 +214,14 @@ def check_high_cardinality(df: pd.DataFrame, ctx) -> list[DataIssue]:
         series = df[column]
         if not _is_textual(series) and not isinstance(
             series.dtype, pd.CategoricalDtype
+        ):
+            continue
+        # A number stored as text is not a category to encode. check_mixed_types
+        # already reports it as numeric_stored_as_text, and recommending target
+        # encoding for it contradicts that finding.
+        if (
+            _is_textual(series)
+            and _numeric_parse_rate(series) >= NUMERIC_PARSE_THRESHOLD
         ):
             continue
         n_unique = int(series.nunique())
