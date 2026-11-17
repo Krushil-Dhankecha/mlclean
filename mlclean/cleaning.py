@@ -42,6 +42,7 @@ class CleaningPipeline:
 
     steps: list[CleaningStep] = field(default_factory=list)
     version: str = "0.1.0"
+    errors: list[dict[str, Any]] = field(default_factory=list)
 
     def to_json(self, path: str | Path | None = None) -> str:
         payload = json.dumps(
@@ -74,13 +75,29 @@ class CleaningPipeline:
         """Replay every step on a (copy of a) DataFrame.
 
         With ``include_row_steps=False``, steps that drop rows are skipped so
-        the result keeps one output row per input row.
+        the result keeps one output row per input row. A failing step is
+        recorded in ``self.errors`` and skipped so remaining steps still run.
         """
         out = df.copy()
+        self.errors = []
         for step in self.steps:
             if not include_row_steps and step.step in ROW_STEPS:
                 continue
-            out = _APPLIERS[step.step](out, step)
+            try:
+                applier = _APPLIERS.get(step.step)
+                if applier is None:
+                    raise KeyError(f"unknown cleaning step '{step.step}'")
+                out = applier(out, step)
+            except Exception as err:  # noqa: BLE001 — one bad step must not kill cleaning
+                self.errors.append(
+                    {
+                        "step": step.step,
+                        "reason": step.reason,
+                        "columns": list(step.columns),
+                        "error_type": type(err).__name__,
+                        "error": str(err),
+                    }
+                )
         return out
 
 
@@ -213,7 +230,10 @@ def build_pipeline(report, strategy: str) -> CleaningPipeline:
             rate = issue.details.get("rate", 0)
             if strategy == "balanced" and rate >= report.context.missing_threshold:
                 continue  # left for aggressive
-            if pd.api.types.is_numeric_dtype(report.df[column]):
+            series = report.df[column]
+            if pd.api.types.is_numeric_dtype(series) and not pd.api.types.is_bool_dtype(
+                series
+            ):
                 numeric_gaps.append(column)
             else:
                 categorical_gaps.append(column)
